@@ -215,3 +215,8 @@ pip-log.txt
 .mr.developer.cfg
 
 *.h5
+*.csv
+*.avi
+*.mat
+rawdata
+testanalysis
