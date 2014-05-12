@@ -113,7 +113,13 @@ if ischar(datafiles)
 end
 
 ndata = length(datafiles);
-
+if ~isempty(opt.plotvars) && iscell(opt.plotvars)
+    if ischar(opt.plotvars{1})
+        opt.plotvars = {opt.plotvars};
+    end
+    assert(length(opt.plotvars) == ndata);
+end
+    
 nsubplot = 0;
 for i = 1:ndata
     vars = who('-file',datafiles{i});
@@ -151,9 +157,9 @@ for i = 1:ndata
             isover = true;
         end
     elseif ~isempty(opt.plotvars)
-        assert(length(opt.plotvars) >= 2);
-        tvar = opt.plotvars{1};
-        plotvars = opt.plotvars(2:end);
+        assert(length(opt.plotvars{i}) >= 2);
+        tvar = opt.plotvars{i}{1};
+        plotvars = opt.plotvars{i}(2:end);
         isover = opt.isoverlay;
     end
 
@@ -165,6 +171,7 @@ for i = 1:ndata
             plotcmd1{2*j + 1} = plotvars{j};
         end
         plotcmds{i}{1} = plotcmd1;
+        plotnames{i}{1} = plotvars;
         nsubplot = nsubplot + 1;
     else
         plotcmd1 = cell(1,length(plotvars));
@@ -172,6 +179,7 @@ for i = 1:ndata
             plotcmd1{j} = {@plot,tvar,plotvars{j}};
         end
         plotcmds{i} = plotcmd1;
+        plotnames{i} = plotvars;
         nsubplot = nsubplot + numel(plotcmd1);
     end
     F{i} = load(datafiles{i},tvar,plotvars{:});
@@ -221,6 +229,7 @@ for i = 1:length(plotcmds)
         hln{i,j} = feval(plotcmd1{1},data.hplotax(plotind),plotcmd1{2:end});
         set(hln{i,j},'HitTest','off');
         set(data.hplotax(plotind), 'ButtonDownFcn',@on_click_axes);
+        ylabel(data.hplotax(plotind), plotnames{i}{j});
         
         axis(data.hplotax(plotind), 'tight');
         hbar(plotind) = vertplot(data.hplotax(plotind), tshow, 'k--');
