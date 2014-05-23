@@ -10,6 +10,11 @@ opt = parsevarargin(opt, varargin, 3);
 
 if ((nargin == 0) || isempty(vidfiles))
     [fn,pn] = uigetfile('*.avi','Choose video(s)', 'MultiSelect','on');
+    if (isnumeric(fn) && (fn == 0))
+        fprintf('Cancelling...\n');
+        return;
+    end
+    
     if (iscell(fn))
         vidfiles = cell(size(fn));
         for i = 1:length(fn)
@@ -22,6 +27,10 @@ end
 
 if ((nargin < 2) || isempty(datafiles))
     [fn,pn] = uigetfile('*.mat','Choose data file(s)', 'MultiSelect','on');
+    if (isnumeric(fn) && (fn == 0))
+        fprintf('Cancelling...\n');
+        return;
+    end
     if (iscell(fn))
         datafiles = cell(size(fn));
         for i = 1:length(fn)
@@ -39,6 +48,7 @@ end
 nvid = length(vidfiles);
 vidnames = cell(1,nvid);
 
+tvidrng = zeros(nvid,2);
 for i = 1:nvid
     vid(i) = VideoReader2(vidfiles{i});
     fps(i) = vid(i).FrameRate;
@@ -74,7 +84,7 @@ for i = 1:nvid
         prompt = {'Frames per second:', 'Trigger time (fraction):'};
         def = {num2str(fps(i)), '1.0'};
         
-        vals = inputdlg(prompt, vidnames{i}, 1, def);
+        vals = inputdlg(prompt, vidnames{i}, 1, def,'on');
         if isempty(vals)
             fprintf('Cancelling...\n');
             return;
@@ -106,6 +116,11 @@ for i = 1:nvid
         otherwise
             error('Unknown trigger type %s', opt.trigger);
     end
+    tvidrng(i,:) = [min(tvid{i}) max(tvid{i})];
+end
+vidoverlap = [max(tvidrng(:,1)) min(tvidrng(:,2))];
+if (vidoverlap(1) > vidoverlap(2))
+    error('No overlap in time for the videos!  (Did you set the trigger right?)');
 end
 
 if ischar(datafiles)
@@ -119,10 +134,16 @@ if ~isempty(opt.plotvars) && iscell(opt.plotvars)
     end
     assert(length(opt.plotvars) == ndata);
 end
-    
+
+tplotrng = zeros(ndata,2);
 nsubplot = 0;
 for i = 1:ndata
-    vars = who('-file',datafiles{i});
+    try
+        vars = who('-file',datafiles{i});
+    catch err
+        keyboard;
+    end
+    
     [pn,fn] = fileparts(datafiles{i});
     
     if isempty(opt.plotvars)
@@ -138,7 +159,7 @@ for i = 1:ndata
         end
 
         tvar = vars1{tsel};
-
+        
         vars1 = [vars(~ist); vars(ist)];
         [varsel,status] = listdlg('PromptString','Select variables to plot:', ...
             'SelectionMode','multiple', ...
@@ -151,8 +172,8 @@ for i = 1:ndata
         plotvars = vars1(varsel);
 
         if (length(varsel) > 1)
-            over = questdlg('Overlay plots?','Plot type','Yes','No','Yes');
-            isover = strcmp(over,'Yes');
+            overlay = questdlg('Overlay plots?','Plot type','Yes','No','Yes');
+            isover = strcmp(overlay,'Yes');
         else
             isover = true;
         end
@@ -183,6 +204,56 @@ for i = 1:ndata
         nsubplot = nsubplot + numel(plotcmd1);
     end
     F{i} = load(datafiles{i},tvar,plotvars{:});
+    
+    tplotrng(i,:) = [min(F{i}.(tvar)) max(F{i}.(tvar))];
+
+    overlap = [tvidrng; tplotrng(i,:)];
+    overlap = [max(overlap(:,1)) min(overlap(:,2))];
+    trig = 'none';
+    if (overlap(2) - overlap(1) < 0.2*(vidoverlap(2)-vidoverlap(1)))
+        %no overlap!
+        overend = [tvidrng; tplotrng(i,:)-tplotrng(i,2)];
+        overend = [max(overlap(:,1)) min(overlap(:,2))];
+        if (overend(2) - overend(1) < 0.2*(vidoverlap(2)-vidoverlap(1)))
+            trig = 1.0;
+        else
+            trig = 0.0;
+        end
+    end
+
+    prompt = {'Trigger time (fraction):'};
+    if isnumeric(trig)
+        def = {sprintf('%.1f',trig)};
+    else
+        def = {trig};
+    end
+
+    vals = inputdlg(prompt, fn, 1, def,'on');
+    if isempty(vals)
+        fprintf('Cancelling...\n');
+        return;
+    end
+    trig = str2double(vals{1});
+    if (isnan(trig) && ischar(vals{1}))
+        trigtype = vals{1};
+    else
+        trigtype = 'frac';
+        trigfrac = trig;
+    end
+
+    switch trigtype
+        case 'end'
+            F{i}.(tvar) = F{i}.(tvar) - F{i}.(tvar)(end);
+        case {'start','none'}
+            % do nothing
+        case {'frac','fraction'}
+            assert((trigfrac >= 0) && (trigfrac <= 1));
+            ind = round((length(F{i}.(tvar))-1) * trigfrac)+1;
+            F{i}.(tvar) = F{i}.(tvar) - F{i}.(tvar)(ind);
+        otherwise
+            error('Unknown trigger type %s', opt.trigger);
+    end    
+    tplotrng(i,:) = [min(F{i}.(tvar)) max(F{i}.(tvar))];
 end
 
 fig = openfig(mfilename, 'new');
@@ -200,7 +271,6 @@ data.htimer = -1;
 data = do_layout(data, nvid,nsubplot);
 
 tshow = 0;
-trngvid = [-Inf Inf];
 for i = 1:nvid
     [~,frload] = min(abs(tvid{i} - tshow));
 
@@ -210,14 +280,10 @@ for i = 1:nvid
 
     lab = sprintf('%s: Frame %d/%d', data.vidnames{i}, frload,length(tvid{i}));
     set(data.hvidlab(i), 'String',lab);
-    
-    trngvid(1) = max(trngvid(1), min(tvid{i}));
-    trngvid(2) = min(trngvid(2), max(tvid{i}));
 end
 step = 1./max(fps);
 
 plotind = 1;
-trngplot = [-Inf Inf];
 for i = 1:length(plotcmds)
     for j = 1:length(plotcmds{i})
         plotcmd1 = plotcmds{i}{j};
@@ -235,14 +301,16 @@ for i = 1:length(plotcmds)
         hbar(plotind) = vertplot(data.hplotax(plotind), tshow, 'k--');
         
         xl = xlim(data.hplotax(plotind));
-        trngplot(1) = max(trngplot(1), xl(1));
-        trngplot(2) = min(trngplot(2), xl(2));
+        tplotrng(1) = max(tplotrng(1), xl(1));
+        tplotrng(2) = min(tplotrng(2), xl(2));
         plotind = plotind + 1;
     end
 end
 linkaxes(data.hplotax, 'x');
 
-trng = [max(trngvid(1),trngplot(1)) min(trngvid(2),trngplot(2))];
+trng = [tvidrng; tplotrng];
+trng = [max(trng(:,1)) min(trng(:,2))];
+
 set(data.hplotax, 'XLim',trng);
 
 set(data.slider, 'Min',trng(1), 'Max',trng(2), 'Value',tshow, ...
