@@ -67,6 +67,8 @@ if opt.calib
         fig = figure;
         mb = msgbox('Click three zero times','Click','help','non-modal');
         plot(t,acc);
+        vertplot(t(iszero),'k--');
+        
         [tzero,~] = ginputb(3);
         iszero = false(size(t));
         for i = 1:3
