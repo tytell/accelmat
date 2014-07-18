@@ -3,7 +3,7 @@ function imu = get_orient_imu(imu, varargin)
 opt.method = 'simple';
 opt.gyrooffset = [-16 -8];
 opt.gyroband = [0.1 10];
-opt.checkacc = false;
+opt.getoffset = false;
 
 opt = parsevarargin(opt,varargin,2);
 
@@ -17,10 +17,8 @@ gyros = imu.gyro - gyrolo;
 gyros = filtfilt(b,a, gyros);
 
 orient = cumtrapz(imu.t, gyros);
-orient(:,1) = orient(:,1) - opt.gyrooffset(:,1);
-orient(:,2) = orient(:,2) - opt.gyrooffset(:,2);
 
-if opt.checkacc
+if opt.getoffset
     [b,a] = butter(5,0.5/(imu.rate/2),'low');
     acclo = filtfilt(b,a,imu.acc);
     mag = sqrt(sum(acclo.^2,2));
@@ -32,9 +30,26 @@ if opt.checkacc
     end
     orienta(:,2) = -(pi + unwrap(atan2(acclo(:,1),acclo(:,3)))) * 180/pi;
     
-    plot(imu.t, orient(:,1:2));
+    off = [0 0];
+    done = false;
+    plot(imu.t, orient(:,1:2) - repmat(off,[size(orient,1) 1]));
     addplot(imu.t, orienta);
+
+    legend('Gyro x','Gyro y','Acc x','Acc y');
+    while ~done
+        off(1) = input('Gyro x offset?');
+        off(2) = input('Gyro y offset?');
+        
+        plot(imu.t, orient(:,1:2) - repmat(off,[size(orient,1) 1]));
+        addplot(imu.t, orienta);
+        legend('Gyro x','Gyro y','Acc x','Acc y');
+        
+        done = inputyn('OK? ','default',true);
+    end 
 end
+
+orient(:,1) = orient(:,1) - opt.gyrooffset(1);
+orient(:,2) = orient(:,2) - opt.gyrooffset(2);
 
 orient = orient * pi/180;
 
