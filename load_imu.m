@@ -3,6 +3,8 @@ function [imu,calib] = load_imu(filename,calib, varargin)
 opt.calib = false;
 opt.clickzero = false;
 opt.removeweirdblock = true;
+opt.resample = true;
+
 opt = parsevarargin(opt, varargin, 2);
 
 acc = h5read(filename,'/Data/Accel');
@@ -108,6 +110,15 @@ if opt.calib
     
     calib.chip2world = basis;
     calib.world2chip = basis';
+end
+
+if opt.resample
+    newsamp = diground(1./nanmean(diff(t)), 10);
+    fprintf('Resampling at %d Hz\n', newsamp);
+    t0 = t;
+    t = (t0(1):1/newsamp:t0(end))';
+    acc = interp1(t0,acc, t);
+    gyro = interp1(t0,gyro, t);
 end
 
 imu.t = t;
