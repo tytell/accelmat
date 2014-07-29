@@ -2,7 +2,7 @@ function imu = get_orient_imu(imu, varargin)
 
 opt.method = 'simple';
 opt.gyrooffset = [-16 -8];
-opt.gyroband = [0.05 10];
+opt.gyroband = [0.1 10];
 opt.getoffset = false;
 
 opt = parsevarargin(opt,varargin,2);
@@ -10,15 +10,15 @@ opt = parsevarargin(opt,varargin,2);
 imu.rate = 1/mean(diff(imu.t));
 
 if (opt.gyroband(1) > 0)
-    [b,a] = butter(5,opt.gyroband(1)/(imu.rate/2),'low');
-    gyrolo = filtfilt(b,a, imu.gyro);
+    gyrolo = get_low_baseline(imu.t, imu.gyro, opt.gyroband(1));
     
     gyros = imu.gyro - gyrolo;
 else
-    gyros = imu.gyro - repmat(nanmean(imu.gyro),[size(imu.gyro,1) 1]);
+    gyros = imu.gyro;
 end
 [b,a] = butter(5,opt.gyroband(2)/(imu.rate/2), 'low');
 gyros = filtfilt(b,a, gyros);
+gyros = gyros - repmat(nanmean(gyros),[size(imu.gyro,1) 1]);
 
 orient = cumtrapz(imu.t, gyros);
 
@@ -48,7 +48,7 @@ if opt.getoffset
         off(2) = input('Gyro y offset?');
         
         plot(imu.t, orient(:,1:2) - repmat(off,[size(orient,1) 1]));
-        addplot(imu.t, orienta);
+        addplot(imu.t, orienta, '--');
         legend('Gyro x','Gyro y','Acc x','Acc y');
         
         done = inputyn('OK? ','default',true);
