@@ -29,11 +29,13 @@ if opt.getoffset
     acclo = acclo ./ repmat(mag,[1 3]);
 
     orienta(:,1) = (pi + unwrap(atan2(acclo(:,2),acclo(:,3)))) * 180/pi;
-    if (any(orienta(:,1) > 360))
+    if (any(orienta(:,1) > 345))
         orienta(:,1) = orienta(:,1) - 360;
+    elseif (any(orienta(:,1) < -345))
+        orienta(:,1) = orienta(:,1) + 360;
     end
     orienta(:,2) = -(pi + unwrap(atan2(acclo(:,1),acclo(:,3)))) * 180/pi;
-    if (any(abs(orienta(:,2)) > 360))
+    if (any(abs(orienta(:,2)) > 345))
         orienta(:,2) = orienta(:,2) - sign(first(orienta(:,2),isfinite(orienta(:,2))))*360;
     end
     

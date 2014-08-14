@@ -275,7 +275,11 @@ for i = 1:nvid
     [~,frload] = min(abs(tvid{i} - tshow));
 
     im = read(vid(i), frload);
+    if (size(im,3) == 3)
+        im = rgb2gray(im);
+    end
     him(i) = image(im, 'Parent',data.hvidax(i));
+    colormap gray;
     axis(data.hvidax(i),'equal','tight','off','ij');
 
     lab = sprintf('%s: Frame %d/%d', data.vidnames{i}, frload,length(tvid{i}));
