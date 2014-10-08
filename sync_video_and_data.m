@@ -279,7 +279,7 @@ for i = 1:nvid
         im = rgb2gray(im);
     end
     him(i) = image(im, 'Parent',data.hvidax(i));
-    colormap gray;
+    colormap(data.hvidax(i),'gray');
     axis(data.hvidax(i),'equal','tight','off','ij');
 
     lab = sprintf('%s: Frame %d/%d', data.vidnames{i}, frload,length(tvid{i}));
