@@ -278,8 +278,7 @@ for i = 1:nvid
     if (size(im,3) == 3)
         im = rgb2gray(im);
     end
-    him(i) = image(im, 'Parent',data.hvidax(i));
-    colormap(data.hvidax(i),'gray');
+    him(i) = imshow(im, 'InitialMagnification','fit','Parent',data.hvidax(i));
     axis(data.hvidax(i),'equal','tight','off','ij');
 
     lab = sprintf('%s: Frame %d/%d', data.vidnames{i}, frload,length(tvid{i}));
