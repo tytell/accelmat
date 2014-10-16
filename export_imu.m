@@ -154,7 +154,7 @@ end
 
 if isempty(opt.outputformat)
     fprintf('Output file format:\n');
-    fprintf(' T. LabChart Text\n M. Matlab\n E. EDF\n A. All (default)\n');
+    fprintf(' T. LabChart Text\n M. Matlab\n A. All (default)\n');
     fmt1 = input('Choose format: ','s');
     
     switch lower(fmt1)
@@ -162,12 +162,10 @@ if isempty(opt.outputformat)
             fmt = {'text'};
         case {'m','mat','matlab'}
             fmt = {'mat'};
-        case {'e','edf'}
-            fmt = {'edf'};
         case {'a','all'}
-            fmt = {'text','mat','edf'};
+            fmt = {'text','mat'};
         otherwise
-            fmt = {'text','mat','edf'};
+            fmt = {'text','mat'};
     end
 else
     fmt = lower(opt.outputformat);
