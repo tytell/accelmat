@@ -78,7 +78,7 @@ end
 imu = get_orient_imu(imu, 'getoffset');
 
 t0 = imu.t;
-t1 = (t0(1):1/resamplerate:t0(end))';
+t1 = (t0(1):1/resamplerate:0)';
 X0 = [imu.orient imu.acchi];
 X0(:,1:3) = X0(:,1:3) * 180/pi;     %convert to degrees
 X0(:,4:6) = X0(:,4:6) * 9.800;        %convert to m/s^2
