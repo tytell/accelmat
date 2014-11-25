@@ -1,8 +1,22 @@
-function [qrotV qrotA]  = orientation(imu, Gimu)
+function [qrotV qrotA orient]  = orientation(imu, Gimu)
 % imu: use load_imu or load_2imu to get acceleration and gyro data
 % grav: measured acceleration of the chip at rest (measure of gravity)
 
+f = 1/(imu.t(2) - imu.t(1));
+
 % Initiate variables
+    %gyro is in deg/sec - convert to rad/s
+    imu.gyro = imu.gyro * pi/180;
+    Gimu.gyro = Gimu.gyro * pi/180;
+    
+    gyrolo = get_low_baseline(imu.t, imu.gyro, 0.1);
+    gyros = imu.gyro - gyrolo;
+    
+    %and then a low pass filter to get rid of the high frequencies
+    [b,a] = butter(5,10/(f/2), 'low');
+    gyros = filtfilt(b,a, gyros);
+    gyros = gyros - repmat(nanmean(gyros),[size(imu.gyro,1) 1]);
+    
     grav = mean(Gimu.acc);
     errA = max(std(Gimu.acc));
     angAcc = mean(Gimu.gyro);
@@ -23,19 +37,17 @@ function [qrotV qrotA]  = orientation(imu, Gimu)
     theta0 = acos(dot(a0, Z));
     V0 = cross(-a0, Z);
     P = sin(theta0/2);
-    Q = [V0/mag(V0)];
+    Q = V0/norm(V0);
     q(1,:) = [cos(theta0/2), P*Q];
-    f = 0.01;
     qrotA = [0 0 0];
  % Generate Quaternions
     for i = 2:length(imu.t)
-        ig = imu.gyro(i,1); ia = imu.acc(i,1);
-        jg = imu.gyro(i,2); ja = imu.acc(i,2);
-        kg = imu.gyro(i,3); ka = imu.acc(i,3);
+        ig = gyros(i,1); ia = imu.acc(i,1);
+        jg = gyros(i,2); ja = imu.acc(i,2);
+        kg = gyros(i,3); ka = imu.acc(i,3);
 %        P = imu.gyro(i-1,:);
 %        Q = imu.gyro(i,:);
         AngV = [ig,jg,kg]; Acc = [ig,jg,kg];
-        theta = acos((dot(Acc, Z)*pi)/180);
         Vect = Acc;
         % want us to multiply a quaternion by the angular velocity but that
         % is only a 1x3 vector and quatmultiply requires two 1x4
@@ -45,6 +57,9 @@ function [qrotV qrotA]  = orientation(imu, Gimu)
         Phi = [1, ([Omega(2), Omega(3), Omega(4)]/2)];
         q(i,:) = quatmultiply2(Phi, q(i-1,:));
       
+        %normalize q
+        q(i,:) = quatnormalize2(q(i,:));
+        
         % METHOD 2 Start --------------------------------------------------
 %         if (mag(a0-Acc) < mag(Acc) && mag(Acc) < mag(a0+Acc) && ...
 %             acos(abs(kg)) < theta) || ...
@@ -67,6 +82,8 @@ function [qrotV qrotA]  = orientation(imu, Gimu)
         qrotV(i,:) = quatrotate2(q(i,:),Vect);
     end
 
-        qrotA = q;
+    qrotA = q;
+    [yaw,pitch,roll] = quat2angle2(q);
+    orient = [roll pitch yaw];
 end
 
