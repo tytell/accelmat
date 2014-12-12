@@ -1,4 +1,4 @@
-function imu = get_orient_imu(imu, varargin)
+function imu = get_orient_imu_updated(imu, varargin)
 
 opt.method = 'simple';
 opt.gyrooffset = [-16 -8];

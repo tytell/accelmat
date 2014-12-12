@@ -4,6 +4,7 @@ opt.resamplerate = [];
 opt.kinematicsfile = '';
 opt.emgfile = '';
 opt.outputformat = '';
+opt.timerange = [];
 opt = parsevarargin(opt,varargin, 4);
 
 if nargin == 0
@@ -75,7 +76,7 @@ else
     resamplerate = opt.resamplerate;
 end
 
-imu = get_orient_imu(imu, 'getoffset');
+imu = get_orient_imu_updated(imu, 'getoffset');
 
 t0 = imu.t;
 t1 = (t0(1):1/resamplerate:0)';
@@ -179,11 +180,22 @@ else
     end
 end
 
+if isempty(opt.timerange)
+    rng = input('Export time range (relative to trigger) (default: all)? ');
+    if isnumeric(rng) && numel(rng) == 2
+        opt.timerange = rng;
+    else
+        opt.timerange = [-Inf Inf];
+    end
+end
+
+good = (t1 >= opt.timerange(1)) & (t1 <= opt.timerange(2));
+
 if ismember('text',fmt)
     fid = fopen(outfile,'w');
     titletplt = ['ChannelTitle=\t' repmat('%s\t',[1 length(chantitle)-1]) '%s\n'];
     fprintf(fid, titletplt, chantitle{:});
-    fprintf(fid, [tplt '\n'], X1');
+    fprintf(fid, [tplt '\n'], X1(good,:)');
     fclose(fid);
 end
 
