@@ -7,7 +7,7 @@ accelnames = {'FwdAcc','SideAcc','UpAcc'};
 orientnames = {'Roll','Pitch','Yaw'};
 kinnames = {'FwdPos','FwdVel','FwdAccVid','SidePos','SideVel','SideAccVid','TailFwd','TailSide'};
 
-if isempty(filename)
+if (nargin == 0) || isempty(filename)
     [fn,pn] = uigetfile('*.mat','Choose full data file');
     filename = fullfile(pn,fn);
 end
@@ -110,6 +110,7 @@ burstamp = NaN(nbeats-1,nemg);
 burstonphase = NaN(nbeats-1,nemg);
 burstoffphase = NaN(nbeats-1,nemg);
 burstduty = NaN(nbeats-1,nemg);
+nbursts = zeros(nbeats-1,nemg);
 for i = 1:nbeats-1
     j = 2*i - 1;
     isbeat = pkind(j):pkind(j+2);
@@ -124,11 +125,14 @@ for i = 1:nbeats-1
     
     for k = 1:nemg
         burstind = find((burston0(:,k) >= pkt(j)) & (burston0(:,k) < pkt(j+2)));
+        nbursts(i,k) = length(burstind);
         if (length(burstind) > 1)
-            warning('Two bursts per tail period?');
-        elseif isempty(burstind)
-            warning('No bursts per tail period...');
-        else
+            dur1 = (burstoff0(burstind,k) - burston0(burstind,k));
+            [~,longest] = max(dur1);
+            burstind = burstind(longest);
+        end
+        
+        if ~isempty(burstind)
             ph0 = tailphase(pkind(j));
             burstonphase(i,k) = burstonphase0(burstind,k) - ph0;
             burstoffphase(i,k) = burstoffphase0(burstind,k) - ph0;
@@ -148,11 +152,11 @@ outname = fullfile(pn,fn);
 
 save(outname,'spiket','spikeamp','spikethreshold','interburstdur','minspikes',...
     'burston0', 'burstoff0', 'tbeat','acc','accpk','vel','per','burstint',...
-    'burstonphase','burstoffphase', 'burstduty','burstamp','tailamp');
+    'burstonphase','burstoffphase', 'burstduty','burstamp','nbursts','tailamp','emgnames');
 
 colnames = {'tbeat','per','vel','accmn','accpk','tailamp'};
 burstnames = {'int','amp',...
-    'onph','offph','duty'};
+    'onph','offph','duty','nincycle'};
 burstnames = repmat(burstnames,[length(emgnames) 1]);
 for i = 1:length(emgnames)
     for j = 1:length(burstnames)
@@ -161,7 +165,8 @@ for i = 1:length(emgnames)
 end
 colnames = [colnames burstnames(:)'];
 colunits = {'s','s','mm/s','mm/s^2','mm/s^2','mm'};
-colunits = [colunits repmat({'V*s','V','','',''},[1 size(burstnames,1)])];
+burstunits = repmat({'V*s','V','','','',''},[length(emgnames) 1]);
+colunits = [colunits burstunits(:)'];
 
 tplt1 = repmat('%s,',[1 length(colnames)]);
 tplt1 = [tplt1(1:end-1) '\n'];
@@ -176,7 +181,7 @@ fprintf(fid,tplt1,colunits{:});
 tplt2 = repmat('%.6f,',[1 length(colnames)]);
 tplt2 = [tplt2(1:end-1) '\n'];
 
-X = [tbeat,per,vel,acc,accpk,tailamp,burstint,burstamp,burstonphase,burstoffphase,burstduty];
+X = [tbeat,per,vel,acc,accpk,tailamp,burstint,burstamp,burstonphase,burstoffphase,burstduty,nbursts];
 assert(size(X,2) == length(colnames));
 
 fprintf(fid,tplt2,X');
