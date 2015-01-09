@@ -1,6 +1,7 @@
-function process_accel_data(filename, varargin)
+function varargout = process_accel_data(filename, varargin)
 
 opt.burstparams = 'ask';  % or 'file','gui'
+opt.savecsv = true;
 opt = parsevarargin(opt,varargin,2);
 
 accelnames = {'FwdAcc','SideAcc','UpAcc'};
@@ -144,48 +145,60 @@ for i = 1:nbeats-1
     end        
 end
 
-[pn,fn,ext] = fileparts(filename);
-outname = fullfile(pn,[fn '-analysis.mat']);
+if (nargout == 0)
+    [pn,fn,ext] = fileparts(filename);
+    outname = fullfile(pn,[fn '-analysis.mat']);
 
-[fn,pn] = uiputfile('*.mat','Choose output file',outname);
-outname = fullfile(pn,fn);
+    [fn,pn] = uiputfile('*.mat','Choose output file',outname);
+    outname = fullfile(pn,fn);
 
-save(outname,'spiket','spikeamp','spikethreshold','interburstdur','minspikes',...
-    'burston0', 'burstoff0', 'tbeat','acc','accpk','vel','per','burstint',...
-    'burstonphase','burstoffphase', 'burstduty','burstamp','nbursts','tailamp','emgnames');
+    save(outname,'spiket','spikeamp','spikethreshold','interburstdur','minspikes',...
+        'burston0', 'burstoff0', 'tbeat','acc','accpk','vel','per','burstint',...
+        'burstonphase','burstoffphase', 'burstduty','burstamp','nbursts','tailamp','emgnames', ...
+        'tailphase');
 
-colnames = {'tbeat','per','vel','accmn','accpk','tailamp'};
-burstnames = {'int','amp',...
-    'onph','offph','duty','nincycle'};
-burstnames = repmat(burstnames,[length(emgnames) 1]);
-for i = 1:length(emgnames)
-    for j = 1:length(burstnames)
-        burstnames{i,j} = [burstnames{i,j} '-' emgnames{i}];
+    colnames = {'tbeat','per','vel','accmn','accpk','tailamp'};
+    burstnames = {'int','amp',...
+        'onph','offph','duty','nincycle'};
+    burstnames = repmat(burstnames,[length(emgnames) 1]);
+    for i = 1:length(emgnames)
+        for j = 1:length(burstnames)
+            burstnames{i,j} = [burstnames{i,j} '-' emgnames{i}];
+        end
     end
+    colnames = [colnames burstnames(:)'];
+    colunits = {'s','s','mm/s','mm/s^2','mm/s^2','mm'};
+    burstunits = repmat({'V*s','V','','','',''},[length(emgnames) 1]);
+    colunits = [colunits burstunits(:)'];
+
+    tplt1 = repmat('%s,',[1 length(colnames)]);
+    tplt1 = [tplt1(1:end-1) '\n'];
+
+    [pn,fn,ext] = fileparts(outname);
+    outname2 = fullfile(pn,[fn '.csv']);
+
+    fid = fopen(outname2,'w');
+    fprintf(fid,tplt1,colnames{:});
+    fprintf(fid,tplt1,colunits{:});
+
+    tplt2 = repmat('%.6f,',[1 length(colnames)]);
+    tplt2 = [tplt2(1:end-1) '\n'];
+
+    X = [tbeat,per,vel,acc,accpk,tailamp,burstint,burstamp,burstonphase,burstoffphase,burstduty,nbursts];
+    assert(size(X,2) == length(colnames));
+
+    fprintf(fid,tplt2,X');
+    fclose(fid);
+else
+    S = struct('spiket',spiket,'spikeamp',spikeamp,'spikethreshold',spikethreshold,...
+        'interburstdur',interburstdur,'minspikes',minspikes,...
+        'burston0',burston0, 'burstoff0',burstoff0, 'tbeat',tbeat, 'acc',acc, ...
+        'accpk',accpk, 'vel',vel, 'per',per, 'burstint',burstint, ...
+        'burstonphase',burstonphase, 'burstoffphase',burstoffphase, ...
+        'burstduty',burstduty, 'burstamp',burstamp, 'nbursts',nbursts, ...
+        'tailamp',tailamp, 'emgnames',{emgnames},'tailphase',tailphase,'t',t);
+    varargout = {S};
 end
-colnames = [colnames burstnames(:)'];
-colunits = {'s','s','mm/s','mm/s^2','mm/s^2','mm'};
-burstunits = repmat({'V*s','V','','','',''},[length(emgnames) 1]);
-colunits = [colunits burstunits(:)'];
-
-tplt1 = repmat('%s,',[1 length(colnames)]);
-tplt1 = [tplt1(1:end-1) '\n'];
-
-[pn,fn,ext] = fileparts(outname);
-outname2 = fullfile(pn,[fn '.csv']);
-
-fid = fopen(outname2,'w');
-fprintf(fid,tplt1,colnames{:});
-fprintf(fid,tplt1,colunits{:});
-
-tplt2 = repmat('%.6f,',[1 length(colnames)]);
-tplt2 = [tplt2(1:end-1) '\n'];
-
-X = [tbeat,per,vel,acc,accpk,tailamp,burstint,burstamp,burstonphase,burstoffphase,burstduty,nbursts];
-assert(size(X,2) == length(colnames));
-
-fprintf(fid,tplt2,X');
-fclose(fid);
 
     
 
