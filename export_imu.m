@@ -11,8 +11,9 @@ if nargin == 0
     [fn,pn] = uigetfile('*.mat','Choose calibration file',pn);
     calibfile = fullfile(pn,fn);
     
-    [fn,pn] = uigetfile('*.mat','Choose kinematics file (or Cancel for none)',pn);
-    if ~isempty(fn)
+    [fn,pn1] = uigetfile('*.mat','Choose kinematics file (or Cancel for none)',pn);
+    if ischar(fn)
+        pn = pn1;
         kinfile = fullfile(pn,fn);
     else
         kinfile = '';
