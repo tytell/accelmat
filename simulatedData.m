@@ -42,8 +42,9 @@ phi     = roll;
 
 
 % Rotation of the rigid body
-Ax          = 3*(accel.noisestd);
-rOP         = [0,0,0]'; % meters
+% Ax          = 10*(accel.noisestd);
+Ax          = 0.1;
+rOP         = [0,-5e-3,1e-2]'; % meters
 Accel_CoM     = [Ax*sin(4*pi*freq*time);zeros(2,length(time))];
 Accel_P     = getAcceleration(Accel_CoM, rOP, Omega_Sensor, Alpha_Sensor);
 
