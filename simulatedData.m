@@ -3,12 +3,12 @@
 function [simimu] = simluatedData()
 
 samplefreq	= 1e-3;     % 1 KHz
-time        = 0:samplefreq:5; % in seconds
+time        = 0:samplefreq:10; % in seconds
 % Accelerometer (datesheet) quantities
 accel.noisestd  = (3e-4*sqrt(0.5/samplefreq));          % unit = g (9.81 m/s2)
 % Gyroscope (datasheet) quantities
 gyro.noisestd   = deg2rad(0.01*sqrt(0.5/samplefreq)); % unit = radians
-
+gyro.biasstd    = 2*gyro.noisestd;
 % Simulation characteristics
 freq        = 0.5;
 
@@ -50,10 +50,15 @@ Accel_P     = getAcceleration(Accel_CoM, rOP, Omega_Sensor, Alpha_Sensor);
 % Adding noise
 % gyro.sigma = (gyro.noisevar)*eye(3,3); R = (chol(gyro.sigma));
 simimu.gyro     = Omega_Sensor + (gyro.noisestd)*randn(size(Omega_Sensor));
-
+% Adding bias drift
+Bias            = getBias(length(Omega_Sensor), gyro.biasstd);
+simimu.gyro     = simimu.gyro+Bias;
 % accel.sigma = (accel.noisevar)*eye(3,3); R = chol(accel.sigma);
 simimu.acc  = Accel_P + accel.noisestd*randn(size(Accel_P));
 
+simimu.gyro     = simimu.gyro';
+simimu.acc      = simimu.acc';
+simimu.t        = time';
 
 
 figure('Name','Gyroscope with noise, without drift')
@@ -111,4 +116,13 @@ function [Mat] = crossMat(vector)
     Mat = [0, -vector(3), vector(2);
         vector(3), 0, -vector(1);
         -vector(2), vector(1), 0];
+end
+
+% Random walk
+function [Bias] = getBias(length, std)
+    Bias = zeros(3,length);
+    Bias(:,1) = std*randn(3,1);
+    for ii=2:length
+        Bias(:,ii) = Bias(:,ii-1) + std*randn(3,1);
+    end
 end
