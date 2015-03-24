@@ -17,7 +17,13 @@ function results = filterMadgwick(imu, varargin)
         opt.zeta            = 0.95;
     elseif (strcmp(opt.type,'kalman'))
         opt.typenum     = 2;
-        
+        Pkm1            = randn(6,6);
+        xkm1Est         = 0.5*rand(6,1);
+        samplefreq      = 1e-3;
+        gyronoisestd    = deg2rad(0.01*sqrt(0.5/samplefreq)); % unit = radians
+        accelnoisestd   = (3e-4*sqrt(0.5/samplefreq));
+        Q               = diag([ones(3,1);0.5*ones(3,1)])*gyronoisestd;
+        R               = accelnoisestd*eye(3);
     else error('Invalid filtering type - input kalman or complemetary');
     end
     
@@ -30,6 +36,7 @@ function results = filterMadgwick(imu, varargin)
     qEstimate = zeros(length(time)+1,4);
     qEstimate(1,:) = [1 0 0 0];
     dT          = [diff(time)]; dT = [dT(1);dT];
+    
     tic
     for t = 1:length(time)
 %         Step 1 - Acceleromter processing
@@ -58,33 +65,6 @@ function results = filterMadgwick(imu, varargin)
 % % % %              options = optimoptions('fminunc','GradObj','on','Display','notify');
 % % % %             qEst = fminunc(@(q)minErrfunc(q,qAccEst, qGyroEst, (1-gamma)/gamma),qEstimate(t,:),options);
             qEst = qEst/norm(qEst);
-        elseif(opt.typenum == 2)
-%             OPTION 2 - KALMAN FILTER
-%             Model => x= [phi;theta;psi; bias (3x3)]
-%             x(k+1)  = A x(k) + B u(k) + w(k)
-%             z(k)    = H x(k) + v(k)
-            phi = xkm1Est(1); theta = xkm1Est(2); psi = xkm1Est(3);
-            W   = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);
-                0, cos(phi), -sin(phi);
-                0, sin(phi)/cos(theta), cos(phi)/cos(theta)];
-            Ak  = [eye(3,3), -W*dT(t);
-                zeros(3,3) + eye(3,3)];
-            Bk  = [W*dT(t);zeros(3,3)];
-            Hk  = [ones(1,3), zeros(1,3)];
-            uk  = Gyroscope(t,:);
-            zk  = qAccEst;
-%             Kalman Step 1 - Marginal gaussian
-            Pkm         = Ak*Pkm1*Ak' + Q;
-            xkmhat      = Ak*xkm1Est + Bk*uk;
-%             Kalman Step 2 - Conditional gaussian
-            Kk          = Pkm*Hk'*pinv(Hk*Pkm*Hk' + R);
-            xkEst       = xkmhat +Kk*(zk-Hk*xkmhat);
-            Pk          = (1-Kk*Hk)*Pkm;
-            euler       = xkEst(1:3);
-%             Update for next loop
-            xkm1Est = xkEst;
-            Pkm1    = Pk;
-        end
 %         Step 4 - Updating all the stuff
         qEstimate(t+1,:) = qEst;
         euler(t,:) = quatern2euler(quaternConj(qEst));
@@ -96,12 +76,52 @@ function results = filterMadgwick(imu, varargin)
             quaternProd([0 0 0 1],qEst));
         DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:) - ...
             qGravity_Sensor(2:end);
+        
+        elseif(opt.typenum == 2)
+%             OPTION 2 - KALMAN FILTER
+%             Model => x= [phi;theta;psi; bias (3x3)]
+%             x(k+1)  = A x(k) + B u(k) + w(k)
+%             z(k)    = H x(k) + v(k)
+            phi = xkm1Est(1); theta = xkm1Est(2); psi = xkm1Est(3);
+            W   = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);
+                0, cos(phi), -sin(phi);
+                0, sin(phi)/cos(theta), cos(phi)/cos(theta)];
+            Ak  = [eye(3,3), -W*dT(t);
+                zeros(3,3), eye(3,3)];
+            Bk  = [W*dT(t);zeros(3,3)];
+            Hk  = [eye(3,3), zeros(3,3)];
+            uk  = Gyroscope(t,:)';
+            zk  = quatern2euler(quaternConj(qAccEst))';
+%             Kalman Step 1 - Marginal gaussian
+            Pkm         = Ak*Pkm1*Ak' + Q;
+            xkmhat      = Ak*xkm1Est + Bk*uk;
+%             Kalman Step 2 - Conditional gaussian
+            Kk          = Pkm*Hk'*pinv(Hk*Pkm*Hk' + R);
+            xkEst       = xkmhat + Kk*(zk-Hk*xkmhat);
+            Pk          = (1-Kk*Hk)*Pkm;
+            euler(t,:)       = xkEst(1:3);
+%             Update for next loop and dynamic acceleration
+            xkm1Est = xkEst;
+            Pkm1    = Pk;
+            R = euler2rotMat(xkEst(1), xkEst(2), xkEst(3));
+            DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:)- [0,0,1]*R';
+        end
+% % %         Step 4 - Updating all the stuff
+% %         qEstimate(t+1,:) = qEst;
+% %         euler(t,:) = quatern2euler(quaternConj(qEst));
+% %         qDotEst         = (qEstimate(t+1,:) - qEstimate(t,:))/dT(t);
+% %         qOmegaEst       = 2*quaternProd(quaternConj(qEst),...
+% %             qDotEst);
+% %         omegaBias(t+1,:) = Gyroscope(t,:) - qOmegaEst(2:end);
+% %         qGravity_Sensor = quaternProd(quaternConj(qEst),...
+% %             quaternProd([0 0 0 1],qEst));
+% %         DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:) - ...
+% %             qGravity_Sensor(2:end);
     end
     toc
-%     keyboard
     figure()
     plot(qEstimate);
-    figure('Name', strcat('alpha/beta = ',num2str(opt.alphabybeta),' T_{window} = ', num2str(opt.twindow)))
+%     figure('Name', strcat('alpha/beta = ',num2str(opt.alphabybeta),' T_{window} = ', num2str(opt.twindow)))
     plot(rad2deg(imu.realeulerrad'),'--');
     hold on
     plot(rad2deg(euler));
@@ -126,7 +146,7 @@ function [theMatrix] = crossProductMatrix(theVector)
     end
 end
 
-%%
+
 %%
 function qAccEst = getQuartGravity_Optimization(Gravity_Sensor, q0, varargin)
     if(strcmp(varargin{1},'constrained'))
