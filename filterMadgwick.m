@@ -1,22 +1,22 @@
 function results = filterMadgwick(imu, varargin)
     %     Options - default
-    opt.type            = 'complementary';
-    for i=1:2:(nargin-1)
-        if strcmp(varargin{i},'alphabybeta'), opt.alphabybeta=varargin{i+1};
-        elseif strcmp(varargin{i},'twindow'), opt.twindow=varargin{i+1};
-        elseif strcmp(varargin{i},'zeta'), opt.zeta=varargin{i+1};
-        elseif strcmp(varargin{i},'type'), opt.type=varargin{i+1}; %options - kalman, complementary
-        else error('Invalid argument');
-        end
-    end
-%     Tuning parameters for respective filter type
+    
+    opt.type = 'complementary';      % or 'kalman'
+    opt.alphabybeta = 10;
+    opt.twindow = 125;
+    opt.zeta = 0.95;
+    opt.filtertime = [-Inf Inf];
+    
+    %add kalman filter parameters here
+    
+    opt = parsevarargin(opt,varargin, 2);
+    
     if(strcmp(opt.type,'complementary'))
-        opt.typenum         = 1;
-        opt.alphabybeta     = 10;
-        opt.twindow         = 125;
-        opt.zeta            = 0.95;
+        opt.typenum = 1;
     elseif (strcmp(opt.type,'kalman'))
         opt.typenum     = 2;
+        %eventually update kalman parameters here
+        
         Pkm1            = randn(6,6);
         xkm1Est         = 0.5*rand(6,1);
         samplefreq      = 1e-3;
@@ -24,12 +24,16 @@ function results = filterMadgwick(imu, varargin)
         accelnoisestd   = (3e-4*sqrt(0.5/samplefreq));
         Q               = diag([ones(3,1);0.5*ones(3,1)])*gyronoisestd;
         R               = accelnoisestd*eye(3);
-    else error('Invalid filtering type - input kalman or complemetary');
+    else
+        error('Invalid filtering type - input kalman or complemetary');
     end
     
     time            = imu.t;
-    Gyroscope       = imu.gyro;
-    Accelerometer   = imu.acc;
+    good = (time >= opt.filtertime(1)) & (time <= opt.filtertime(2));
+    time = time(good);
+    
+    Gyroscope       = imu.gyro(good,:);
+    Accelerometer   = imu.acc(good,:);
     DynamicAcceleration_Sensor = zeros(length(time), 3);
 
     omegaBias = zeros(length(time)+1,3);
@@ -37,7 +41,7 @@ function results = filterMadgwick(imu, varargin)
     qEstimate(1,:) = [1 0 0 0];
     dT          = [diff(time)]; dT = [dT(1);dT];
     
-    tic
+    timedWaitBar(0,'Filtering data...');
     for t = 1:length(time)
 %         Step 1 - Acceleromter processing
         Gravity_Sensor   = Accelerometer(t,:) - DynamicAcceleration_Sensor(t,:);
@@ -117,8 +121,11 @@ function results = filterMadgwick(imu, varargin)
 % %             quaternProd([0 0 0 1],qEst));
 % %         DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:) - ...
 % %             qGravity_Sensor(2:end);
+        timedWaitBar(t/length(time));
     end
     toc
+    timedWaitBar(1);
+    
     figure()
     plot(qEstimate);
 %     figure('Name', strcat('alpha/beta = ',num2str(opt.alphabybeta),' T_{window} = ', num2str(opt.twindow)))
@@ -147,7 +154,7 @@ function [theMatrix] = crossProductMatrix(theVector)
 end
 
 
-%%
+%
 function qAccEst = getQuartGravity_Optimization(Gravity_Sensor, q0, varargin)
     if(strcmp(varargin{1},'constrained'))
 %         Constrained optimization - ||q|| = 1
@@ -162,7 +169,7 @@ function qAccEst = getQuartGravity_Optimization(Gravity_Sensor, q0, varargin)
     end
 end
 
-%% 
+% 
 function [f,g] = costfunc(q, Accelerometer)
     F = [2*(q(2)*q(4) - q(1)*q(3)) - Accelerometer(1)
         2*(q(1)*q(2) + q(3)*q(4)) - Accelerometer(2)
