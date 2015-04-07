@@ -24,8 +24,16 @@ function results = filterMadgwick(imu, varargin)
         accelnoisestd   = (3e-4*sqrt(0.5/samplefreq));
         Q               = diag([ones(3,1);0.5*ones(3,1)])*gyronoisestd;
         R               = accelnoisestd*eye(3);
-    else
-        error('Invalid filtering type - input kalman or complemetary');
+    elseif (strcmp(opt.type,'EKF'))
+        opt.typenum     = 3;
+        Pkm1            = randn(6,6);
+        xkm1Est         = 0.5*rand(6,1);
+        samplefreq      = 1e-3;
+        T               = samplefreq;
+        gyronoisestd    = deg2rad(0.01*sqrt(0.5/samplefreq)); % unit = radians
+        accelnoisestd   = (3e-4*sqrt(0.5/samplefreq));
+        Q               = diag([0.75*ones(3,1);0.5*ones(3,1)])*gyronoisestd;
+        R               = accelnoisestd*eye(3);
     end
     
     time            = imu.t;
@@ -87,18 +95,12 @@ function results = filterMadgwick(imu, varargin)
 %             x(k+1)  = A x(k) + B u(k) + w(k)
 %             z(k)    = H x(k) + v(k)
             phi = xkm1Est(1); theta = xkm1Est(2); psi = xkm1Est(3);
-            W   = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);
-                0, cos(phi), -sin(phi);
-                0, sin(phi)/cos(theta), cos(phi)/cos(theta)];
-            Ak  = [eye(3,3), -W*dT(t);
-                zeros(3,3), eye(3,3)];
-            Bk  = [W*dT(t);zeros(3,3)];
             Hk  = [eye(3,3), zeros(3,3)];
             uk  = Gyroscope(t,:)';
             zk  = quatern2euler(quaternConj(qAccEst))';
 %             Kalman Step 1 - Marginal gaussian
-            Pkm         = Ak*Pkm1*Ak' + Q;
-            xkmhat      = Ak*xkm1Est + Bk*uk;
+            [xkmhat, Jfk] = systemDynamicsEKF(xkm1Est, uk, dT(t));
+            Pkm         = Jfk*Pkm1*Jfk' + Q;
 %             Kalman Step 2 - Conditional gaussian
             Kk          = Pkm*Hk'*pinv(Hk*Pkm*Hk' + R);
             xkEst       = xkmhat + Kk*(zk-Hk*xkmhat);
@@ -109,18 +111,31 @@ function results = filterMadgwick(imu, varargin)
             Pkm1    = Pk;
             R = euler2rotMat(xkEst(1), xkEst(2), xkEst(3));
             DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:)- [0,0,1]*R';
+        elseif(opt.typenum == 3)
+%             OPTION 3 - EXTENDED KALMAN FILTER
+%             Model => x= [phi;theta;psi; bias (3x3)]
+%             x(k+1)  = F(x(k),u(k)) + w(k)
+%             z(k)    = H(x(k)) + v(k)
+
+%             Extended Kalman Step 1 - Marginal gaussian
+            Gyro_vector = Gyroscope(t,:)';
+            zk = Gravity_Sensor';
+            xk = xkm1Est;
+            [xkmhat, Jfk] = systemDynamicsEKF(xk, Gyro_vector, T);
+            Pkm         = Jfk*Pkm1*Jfk' + Q;
+%             Extended Kalman Step 2 - Conditional gaussian
+            gN = [0,0,1]';
+            [hk, Jh] = observationDynamicsEKF(xkmhat, gN);
+            Kk          = Pkm*Jh'*pinv(Jh*Pkm*Jh' + R);
+            Pk          = (1-Kk*Jh)*Pkm;
+            xkEst       = xkmhat + Kk*(zk-hk);
+            euler(t,:)       = xkEst(1:3);
+%             Update for next loop and dynamic acceleration
+            xkm1Est = xkEst;
+            Pkm1    = Pk;
+            QR = sensor2inertialRotation(xkEst(1), xkEst(2), xkEst(3));
+            DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:)- gN'*QR;
         end
-% % %         Step 4 - Updating all the stuff
-% %         qEstimate(t+1,:) = qEst;
-% %         euler(t,:) = quatern2euler(quaternConj(qEst));
-% %         qDotEst         = (qEstimate(t+1,:) - qEstimate(t,:))/dT(t);
-% %         qOmegaEst       = 2*quaternProd(quaternConj(qEst),...
-% %             qDotEst);
-% %         omegaBias(t+1,:) = Gyroscope(t,:) - qOmegaEst(2:end);
-% %         qGravity_Sensor = quaternProd(quaternConj(qEst),...
-% %             quaternProd([0 0 0 1],qEst));
-% %         DynamicAcceleration_Sensor(t+1,:) = Accelerometer(t,:) - ...
-% %             qGravity_Sensor(2:end);
         timedWaitBar(t/length(time));
     end
     toc
@@ -128,7 +143,6 @@ function results = filterMadgwick(imu, varargin)
     
     figure()
     plot(qEstimate);
-%     figure('Name', strcat('alpha/beta = ',num2str(opt.alphabybeta),' T_{window} = ', num2str(opt.twindow)))
     plot(rad2deg(imu.realeulerrad'),'--');
     hold on
     plot(rad2deg(euler));
@@ -193,4 +207,95 @@ function [f,g] = minErrfunc(q,qA,qG,lambda)
     J   = [eye(4);lambda*eye(4)]; 
     f = 0.5*(F'*F);
     g   = J'*F;    
+end
+
+% This function outputs the mapping matrix between the Roll-Pitch-Yaw rate
+% and sensor observed angular rates (i.e. ideal gyroscope observations)
+% Theta_dot = B*Omega_sensor
+% Theta_dot = [phi_dot, theta_dot, psi_dot]' = [roll_rate, pitch_rate,
+% yaw_rate]'
+% B = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);]
+% Remember : Rotation Matrix = R()
+% 
+function [B] = sensor2RPYrate(roll, pitch, yaw)
+phi = roll; theta = pitch; psi = yaw;
+B = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);
+    0, cos(phi), -sin(phi);
+    0, sin(phi)*sec(theta), cos(phi)*sec(theta)];
+end
+
+% {e} = Rx(roll)*Ry(pitch)*Rz(yaw)*{E} = Q'*{E}
+% {e},{E} => 3x1, Rx,Ry,Rz => 3x3
+% However, all vectors are written in vector form e.g. a_sensor = 3x1
+% a = {e}'*a_sensor = {E}'*a_inertial
+% => a_inertial = Q*a_sensor and Q = Rz(yaw)'*Ry(pitch)'*Rx(roll)'
+% =========================
+% v_inertial(3x1) = Q*v_sensor(3x1)
+% =========================
+function [Q] = sensor2inertialRotation(roll,pitch,yaw)
+    phi = roll; theta = pitch; psi = yaw;
+    Rz_yaw      = [cos(psi), sin(psi), 0;
+                   -sin(psi), cos(psi), 0;
+                   0 ,0, 1];
+    Ry_pitch    = [cos(theta), 0 ,-sin(theta);
+                   0, 1,0;
+                   sin(theta), 0, cos(theta)];
+    Rx_roll     = [1, 0, 0;
+                    0, cos(phi), sin(phi);
+                    0, -sin(phi), cos(phi)];
+    Q           = Rz_yaw'*Ry_pitch'*Rx_roll';
+end
+
+% xk = 6x1
+% Jf = 6x6
+function [xkp1,Jf] = systemDynamicsEKF(xk, Gyro, T)
+%     x = [Theta;bias]
+    Gyro_unbiased   = Gyro - xk(4:end); 
+    phi = xk(1); theta = xk(2); psi = xk(3);
+    B = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);
+    0, cos(phi), -sin(phi);
+    0, sin(phi)*sec(theta), cos(phi)*sec(theta)];
+% % % % % 
+    B_x1 = [0, cos(phi)*tan(theta), -sin(phi)*tan(theta);
+    0, -sin(phi), -cos(phi);
+    0, cos(phi)*sec(theta), -sin(phi)*sec(theta)];
+% % % % 
+    B_x2 = [0, sin(phi)*(sec(theta)^2), cos(phi)*(sec(theta)^2);
+    0, 0, 0;
+    0, sin(phi)*sec(theta)*tan(theta), cos(phi)*sec(theta)*tan(theta)];
+% 
+    Jf = eye(6) + [B_x1*Gyro_unbiased, B_x2*Gyro_unbiased, zeros(3,1), -B;
+        zeros(3,6)]*T;
+    xkp1 = xk + [B*Gyro_unbiased; zeros(3,1)];
+end
+
+% gN = gravity in inertial coordinate system => 3X1
+% hk = 3x1, Jh = 3x6
+function [hk, Jh] = observationDynamicsEKF(xk, gN)
+    phi = xk(1); theta = xk(2); psi = xk(3);
+    Rz_yaw      = [cos(psi), sin(psi), 0;
+                   -sin(psi), cos(psi), 0;
+                   0 ,0, 1];
+    Ry_pitch    = [cos(theta), 0 ,-sin(theta);
+                   0, 1,0;
+                   sin(theta), 0, cos(theta)];
+    Rx_roll     = [1, 0, 0;
+                    0, cos(phi), sin(phi);
+                    0, -sin(phi), cos(phi)];
+%     Rates/Derivatives
+    Rz_yaw_rate     = [cos(psi), sin(psi), 0;
+                       -sin(psi), cos(psi), 0;
+                       0 ,0, 1];
+    Ry_pitch_rate   = [cos(theta), 0 ,-sin(theta);
+                       0, 1,0;
+                       sin(theta), 0, cos(theta)];
+    Rx_roll_rate    = [1, 0, 0;
+                       0, cos(phi), sin(phi);
+                       0, -sin(phi), cos(phi)];
+    QT              = Rx_roll*Ry_pitch*Rz_yaw;
+    QT_roll         = Rx_roll_rate*Ry_pitch*Rz_yaw;
+    QT_pitch        = Rx_roll*Ry_pitch_rate*Rz_yaw;
+    QT_yaw          = Rx_roll*Ry_pitch*Rz_yaw_rate;
+    Jh              = [QT_roll*gN, QT_pitch*gN, QT_yaw*gN, zeros(3,3)];
+    hk              = QT*gN;
 end
