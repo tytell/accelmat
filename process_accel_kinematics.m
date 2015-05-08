@@ -2,6 +2,8 @@ function K = process_accel_kinematics(filename, varargin)
 
 opt.view = 'ventral';
 opt.mirror = false;     % filmed through a mirror at 45deg (flips y axis)
+opt.massperlen = ones(10,1);
+opt.smoothdur = 0.5;
 
 opt = parsevarargin(opt,varargin, 2);
 
@@ -39,6 +41,7 @@ end
 mx = [hxs; exs; txs];
 my = [hys; eys; tys];
 npts = size(mx,1);
+nfr = size(mx,2);
 
 if opt.mirror
     my = -my;
@@ -49,8 +52,27 @@ mymm = my*scale;
 dsmm = sqrt(diff(mxmm).^2 + diff(mymm).^2);
 smm = [zeros(1,size(mx,2)); cumsum(dsmm)];
 
-swimvecx = NaN(1,size(mxmm,2));
-swimvecy = NaN(1,size(mxmm,2));
+%estimate center of mass position
+s1 = nanmean(smm,2);
+s1 = s1 / s1(end);
+len1 = linspace(0,1,length(opt.massperlen));
+massperlen = interp1(len1,opt.massperlen, s1);
+
+%integrate to get total mass
+mass = trapz(s1,massperlen);
+
+%integrate(x(s) * massperlen(s) ds)/area
+% to get COM position
+comx = zeros(1,nfr);
+comy = zeros(1,nfr);
+for i = 1:nfr,
+    comx(i) = trapz(s1, mxmm(:,i).*massperlen ./ mass);
+    comy(i) = trapz(s1, mymm(:,i).*massperlen ./ mass);
+end;
+
+%now look for the main body axis
+swimvecx0 = NaN(1,size(mxmm,2));
+swimvecy0 = NaN(1,size(mxmm,2));
 midx = NaN(size(mxmm));
 midy = NaN(size(mymm));
 
@@ -59,21 +81,29 @@ for i = ind
     %straight line interpolant, minimizing the perpendicular distance
     %to the points (doesn't prioritize x or y, and works if we're
     %horizontal or vertical)
-    sp1 = spap2(1, 2, smm(:,i)', [mxmm(:,i),mymm(:,i)]');
-    xy1 = fnval(sp1,smm(:,i)')';
-    midx(:,i) = xy1(:,1);
-    midy(:,i) = xy1(:,2);
+    sp1 = spap2(1, 2, smm(:,i)', [mxmm(:,i)-comx(i),mymm(:,i)-comy(i)]');
+    xy1 = fnval(sp1,smm([1 end],i)')';
     
-    swimvecx1 = xy1(end,1) - xy1(1,1);
-    swimvecy1 = xy1(end,2) - xy1(1,2);
+    swimvecx1 = xy1(1,1) - xy1(end,1);
+    swimvecy1 = xy1(1,2) - xy1(end,2);
     mag = sqrt(swimvecx1.^2 + swimvecy1.^2);
     
-    swimvecx(i) = swimvecx1/mag;
-    swimvecy(i) = swimvecy1/mag;
+    swimvecx0(i) = swimvecx1/mag;
+    swimvecy0(i) = swimvecy1/mag;
 end
 
-excx = mxmm - midx;
-excy = mymm - midy;
+%smooth over a period longer than a tailbeat
+good = isfinite(swimvecx0);
+swimvecx = NaN(size(swimvecx0));
+swimvecy = NaN(size(swimvecx0));
+swimvecx(good) = get_low_baseline(t(good)',swimvecx0(good)', 1/opt.smoothdur)';
+swimvecy(good) = get_low_baseline(t(good)',swimvecy0(good)', 1/opt.smoothdur)';
+mag = sqrt(swimvecx.^2 + swimvecy.^2);
+swimvecx = swimvecx ./ mag;
+swimvecy = swimvecy ./ mag;
+
+excx = mxmm - repmat(comx,[npts 1]);
+excy = mymm - repmat(comy,[npts 1]);
 
 switch opt.view
     case 'ventral'
@@ -165,10 +195,15 @@ for side = 1:2
     end
 end
 
+bad = indpeak == 0;
+indpeak(bad) = NaN;
+amppeak(bad) = NaN;
+
 good = any(isfinite(indpeak));
 indpeak = indpeak(:,good);
 amppeak = amppeak(:,good);
 sidepeak = sidepeak(:,good);
+npk = size(indpeak,2);
 
 [~,ord] = sort(nanmean(indpeak));
 indpeak = indpeak(:,ord);
@@ -218,6 +253,47 @@ tcurvepeak(good) = t(indcurvepeak(good));
 
 smm = nanmean(smm,2);
 
+%then derivative to get velocity
+comvelx = deriv(t,comx);
+comvely = deriv(t,comy);
+
+comspeedfwd = comvelx.*swimvecx + comvely.*swimvecy;
+comspeedlat = -comvelx.*swimvecy + comvely.*swimvecx;
+
+headdispfwd = [(diff(hxmm).*swimvecx(1:end-1) + diff(hymm).*swimvecy(1:end-1)) NaN];
+
+%now take means for each tail beat
+comspeedfwdmn = NaN(1,npk);
+comspeedfwdrms = NaN(1,npk);
+comspeedlatrms = NaN(1,npk);
+headdispfwdmn = NaN(1,npk);
+prevheadx = NaN;
+prevheady = NaN;
+prevswimvecx = NaN;
+prevswimvecy = NaN;
+for pk = 1:size(indpeak,2)-1
+    if isfinite(indpeak(end,pk)) && isfinite(indpeak(end,pk+1))
+        btind = indpeak(end,pk)+1:indpeak(end,pk+1);
+        
+        comspeedfwdmn(pk) = nanmean(comspeedfwd(btind));
+        comspeedfwdrms(pk) = rms(comspeedfwd(btind));
+        comspeedlatrms(pk) = rms(comspeedlat(btind));
+        
+        headxmn = nanmean(hxmm(btind));
+        headymn = nanmean(hymm(btind));
+        
+        %displacement of the head from last period to this one, along the
+        %last swimming direction
+        headdispfwdmn(pk) = (headxmn-prevheadx).*prevswimvecx + ...
+            (headymn-prevheady).*prevswimvecy;
+
+        prevswimvecx = nanmean(swimvecx(btind));
+        prevswimvecy = nanmean(swimvecy(btind));
+        prevheadx = headxmn;
+        prevheady = headymn;
+    end
+end
+
 wavespeed = NaN(1,size(indpeak,2));
 for pk = 1:size(indpeak,2)
     p = polyfit(tcurvepeak(2:end,pk),smm(2:end),1);
@@ -251,19 +327,30 @@ amp(:,2:end-1) = (2*amppeak(:,2:end-1) - amppeak(:,1:end-2) - amppeak(:,3:end))/
 ampcurve = NaN(size(indpeak));
 ampcurve(:,2:end-1) = (2*ampcurvepeak(:,2:end-1) - ampcurvepeak(:,1:end-2) - ampcurvepeak(:,3:end))/2;
 
-K.smm = smm;
-K.exc = exc;
+K.t = t;
+K.s = smm / fishlenmm;
+K.exc = exc / fishlenmm;
+K.mx = mxmm / fishlenmm;
+K.my = mymm / fishlenmm;
+K.exc = exc / fishlenmm;
+K.curve = curve * fishlenmm;
+K.headdispfwd = headdispfwd / fishlenmm;
+K.comspeedfwd = comspeedfwd / fishlenmm;
+K.comspeedlat = comspeedlat / fishlenmm;
 K.indpeak = indpeak;
 K.tpeak = tpeak;
 K.sidepeak = sidepeak;
 K.indcurvepeak = indcurvepeak;
 K.tcurvepeak = tcurvepeak;
 K.ampcurvepeak = ampcurvepeak;
-K.amp = amp;
-K.ampcurve = ampcurve;
+K.comspeedfwdmn = comspeedfwdmn / fishlenmm;
+K.comspeedfwdrms = comspeedfwdrms / fishlenmm;
+K.headdispfwdmn = headdispfwdmn / fishlenmm;
+K.amp = amp / fishlenmm;
+K.ampcurve = ampcurve * fishlenmm;
 K.per = per;
-K.wavespeed = wavespeed;
-K.wavelen = wavelen;
+K.wavespeed = wavespeed / fishlenmm;
+K.wavelen = wavelen / fishlenmm;
 
     
         
