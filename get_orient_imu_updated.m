@@ -4,6 +4,7 @@ opt.method = 'simple';
 opt.gyrooffset = [-16 -8];
 opt.gyroband = [0.1 10];
 opt.getoffset = true;
+opt.imuposition = [6.6 11.4 -7];        % distance from COM in mm
 
 opt = parsevarargin(opt,varargin,2);
 
@@ -43,7 +44,7 @@ if opt.getoffset
     % Convert the units first - deg to radians
     imu.gyrocross       = crossProductMatrix(gyros*pi/180);
     imu.angacclocross   = crossProductMatrix(angacclo*pi/180);
-    imu.correctiondist  = [6.6, 11.4, -7]*1e-3;  % Correction distance (1,3) in meters
+    imu.correctiondist  = opt.imuposition*1e-3;  % Correction distance (1,3) in meters
     for ii = 1:size(imu.acc,1)
         imu.newacc(ii,:)  = imu.acc(ii,:) + imu.correctiondist*...
             (imu.angacclocross(:,:,ii) + imu.gyrocross(:,:,ii)^2)';

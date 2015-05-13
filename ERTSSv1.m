@@ -1,4 +1,4 @@
-function [results] = ERTSSv1(imu, Qgyro, Qbias, Qacc, Qdyn, Ca, QaccAmp)
+function [results] = ERTSSv1(imu, Qgyro, Qbias, Qacc, Qdyn, Ca, knownN)
 % Step 1 - get all data
 Gyro    = imu.gyro'; 
 Acc     = imu.acc';
@@ -19,10 +19,8 @@ eulerS       = zeros(3,NN);
 err         = zeros(3,NN);
 PkEKF       = zeros(9,9,NN);
 
-knownN = sort(floor(random('unif',1,NN,20,1)));
-knownN = [1;knownN;NN];
-knownN = 0;
-tic
+%timedWaitBar(0, 'Running forward filter...');
+tic;
 for ttfwd=1:NN
     T = dT(ttfwd);
     Omegak          = Gyro(:,ttfwd);
@@ -57,7 +55,9 @@ for ttfwd=1:NN
     xkEKF(:,ttfwd)     = xk;
     Pkm1            = Pk;
     xkm1            = xk;
+    %timedWaitBar(ttfwd/(2*NN));
 end
+%timedWaitBar(0.5, 'Running backward filter...');
 toc
 % Backward
 xkS(:,NN)   = xkEKF(:,NN);
@@ -76,12 +76,12 @@ for ttbkwd = (NN-1):-1:1
     PkS(:,:,ttbkwd)     = PkFwd + Gk*(PkS(:,:,ttbkwd+1)- Pkp1M)*Gk';
     eulerS(:,ttbkwd)    = xkS(1:3,ttbkwd);
     aD(:,ttbkwd)        = xkS(7:end,ttbkwd);
+    %timedWaitBar((NN + (NN-ttbkwd))/(2*NN));
 end
+toc;
+%timedWaitBar(1);
 
-
-toc
-    
-    figure('name', strcat('Ca=',num2str(Ca),' QaccAmp=',num2str(QaccAmp)));
+    figure('name', strcat('Ca=',num2str(Ca)));
     subplot(2,1,1);
     plot(rad2deg(eulerEFK'),'-.','Linewidth',2);
     hold on
@@ -94,8 +94,8 @@ toc
     hold on;
     title('Dynamic Acceleration');
 end
-%%
-%%
+%
+%
 function [Fk,xkp1,Bk] = systemDynamics(xk, Omegak, T, Ca)
 % xk = Theta = [phi;theta;psi] = [roll;pitch;yaw];
 phi = xk(1); theta = xk(2); psi = xk(3);
@@ -125,7 +125,7 @@ Fk = [eye(3,3) + [Bk_phi*unbiasedOmegak*T, Bk_theta*unbiasedOmegak*T,...
 xkp1    = [xk(1:6)+[Bk*unbiasedOmegak;zeros(3,1)]*T;Ca*xk(7:end)];
 end
 
-%%
+%
 function [QT] = getQT(Theta)
     phi = Theta(1); theta = Theta(2); psi = Theta(3);
     Rz_yaw      = [cos(psi), sin(psi), 0;
@@ -140,7 +140,7 @@ function [QT] = getQT(Theta)
     QT              = Rx_roll*Ry_pitch*Rz_yaw;
 end
 
-%% 
+% 
 % gN = gravity in inertial coordinate system => 3X1
 % hk = 3x1, Jh = 3x9
 function [hk, Jh] = observationDynamicsEKF(xk, gN)
@@ -175,7 +175,7 @@ function [hk, Jh] = observationDynamicsEKF(xk, gN)
     Jh              = [QT_roll*acc_Global, QT_pitch*acc_Global, QT_yaw*acc_Global, zeros(3,3), QT];
     hk              = QT*acc_Global;
 end
-%% 
+% 
 % gN = gravity in inertial coordinate system => 3X1
 % hk = 3x1, Jh = 3x9
 function [hk, Jh] = observationDynamicsEKF3(xk, gN)
@@ -213,7 +213,7 @@ function [hk, Jh] = observationDynamicsEKF3(xk, gN)
                         0,1,0,zeros(1,6)];
     hk              = [QT*acc_Global;theta];
 end
-%% 
+% 
 % gN = gravity in inertial coordinate system => 3X1
 % hk = 3x1, Jh = 3x9
 function [hk, Jh] = observationDynamicsEKF2(xk, gN)

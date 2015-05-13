@@ -4,8 +4,25 @@ opt.calib = false;
 opt.clickzero = false;
 opt.removeweirdblock = true;
 opt.resample = true;
+opt.resamplerate = [];
+opt.axisorder = {};     %{'-Y','-Z','X'};
 
-opt = parsevarargin(opt, varargin, 2);
+if (nargin == 1) 
+    args = {};
+    calib.chip2world = eye(3);
+    calib.world2chip = eye(3);
+    p = 2;
+elseif ischar(calib)
+    args = [calib varargin];
+    calib.chip2world = eye(3);
+    calib.world2chip = eye(3);
+    p = 2;
+else
+    args = varargin;
+    p = 3;
+end
+    
+opt = parsevarargin(opt, args, p);
 
 acc = h5read(filename,'/Data/Accel');
 gyro = h5read(filename,'/Data/Gyro');
@@ -81,8 +98,12 @@ if opt.calib
         close(fig);
     end
     
-    axord = inputdlg({'First zero:', 'Second zero:', 'Third zero:'}, ...
-        'Order of axes',1,{'Y','-Z','X'});
+    if isempty(opt.axisorder)
+        axord = inputdlg({'First zero:', 'Second zero:', 'Third zero:'}, ...
+            'Order of axes',1,{'Y','-Z','X'});
+    else
+        axord = opt.axisorder;
+    end
     axord = regexp(axord, '([+-]?)([XYZxyz])', 'tokens', 'once');
     
     axsign = ones(3,1);
@@ -112,8 +133,12 @@ if opt.calib
     calib.world2chip = basis';
 end
 
-if opt.resample
-    newsamp = diground(1./nanmean(diff(t)), 10);
+if opt.resample || ~isempty(opt.resamplerate)
+    if isempty(opt.resamplerate)
+        newsamp = diground(1./nanmean(diff(t)), 10);
+    else
+        newsamp = opt.resamplerate;
+    end
     fprintf('Resampling at %d Hz\n', newsamp);
     t0 = t;
     t = (t0(1):1/newsamp:t0(end))';
