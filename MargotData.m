@@ -14,13 +14,13 @@ Qbias           = zeros(3,3);
 [~,acccalib] = load_imu('rawdata/bg14/Accelerometer/calib001.h5',[],'calib','axisorder',{'Y','-Z','-X'});
 
 theData         =  load_imu('rawdata/bg14/Accelerometer/bg14_004.h5');
-%theData         = load('Bg5-20_0hz-005.mat');
+% Converting from degrees to radians for calculations
 theData.gyro = deg2rad(theData.gyro);
-% keyboard
-% [results]       = smootherRTS2(theData, Qgyro, Qbias, Qacc);
-% results         = smootherRTSwithAv3(theData, Qgyro, Qbias, Qacc, 10*Qdyn, -0.75, 10);
-
+% 
 knownyaw = [1 length(theData.gyro)];
-theData.realeulerrad = zeros(size(theData.gyro'));
+theDattheData.gyro    = theData.gyro - repmat(constBiasGyro,NN,1);
+
+% subtracting the constant bias from gyro readings
+theData.gyro    = theData.gyro - repmat(constBiasGyro,NN,1);
 
 results         = ERTSSv1(theData, Qgyro, Qbias, Qacc, Qdyn, 1.1, knownyaw);
