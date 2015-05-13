@@ -1,9 +1,11 @@
-function [results] = ERTSSv1(imu, Qgyro, Qbias, Qacc, Qdyn, Ca, knownN)
+function [results] = ERTSSv1(imu, Qgyro, Qbias, Qacc, Qdyn, Ca, varargin)
+knownN = [];
 % Step 1 - get all data
 Gyro    = imu.gyro'; 
 Acc     = imu.acc';
 Rk      = Qacc;
 xkm1      = zeros(9,1);
+xkm1(1:3) = deg2rad([-30,30,0])';
 dT       = diff(imu.t);
 dT       = [dT(1); dT];
 T       = dT(1);
@@ -19,7 +21,7 @@ eulerS       = zeros(3,NN);
 err         = zeros(3,NN);
 PkEKF       = zeros(9,9,NN);
 
-%timedWaitBar(0, 'Running forward filter...');
+% timedWaitBar(0, 'Running forward filter...');
 tic;
 for ttfwd=1:NN
     T = dT(ttfwd);
@@ -57,11 +59,12 @@ for ttfwd=1:NN
     xkm1            = xk;
     %timedWaitBar(ttfwd/(2*NN));
 end
-%timedWaitBar(0.5, 'Running backward filter...');
+% timedWaitBar(0.5, 'Running backward filter...');
 toc
 % Backward
 xkS(:,NN)   = xkEKF(:,NN);
 PkS(:,:,NN)   = PkEKF(:,:,NN);
+aD(:,NN)    = xkS(7:end,NN);
 tic
 for ttbkwd = (NN-1):-1:1
         T = dT(ttbkwd);
