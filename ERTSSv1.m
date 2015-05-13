@@ -83,15 +83,16 @@ toc;
 
     figure('name', strcat('Ca=',num2str(Ca)));
     subplot(2,1,1);
-    plot(rad2deg(eulerEFK'),'-.','Linewidth',2);
+    plot(imu.t,rad2deg(eulerEFK'),'-.','Linewidth',2);
     hold on
-    plot(rad2deg(eulerS'),'Linewidth',2);
+    plot(imu.t,rad2deg(eulerS'),'Linewidth',2);
+    hold off
+    legend('roll','pitch','yaw');
     title('Filtered')
     results.euler = eulerS;
     results.dynamicAcc = aD;
     subplot(2,1,2);
-    plot(aD')
-    hold on;
+    plot(imu.t(1:end-1),aD')
     title('Dynamic Acceleration');
 end
 %

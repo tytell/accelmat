@@ -111,6 +111,7 @@ toc
     hold on
 %     plot(rad2deg(eulerEFK'),'-.','Linewidth',2);
     plot(rad2deg(eulerS'),'Linewidth',2);
+    vertplot(knownN, 'k--');
     title('Filtered')
 %     legend('R True','P True','Y True',...
 %         'R Fwd-Bkwd','P Fwd-Bkwd','Y Fwd-Bkwd');

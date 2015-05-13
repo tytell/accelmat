@@ -62,7 +62,7 @@ phi     = roll;
  [Omega_Sensor, Alpha_Sensor] = ...
     getRotationRatesEulerZYX(psi, theta, phi);
 simimu.realeulerrad = [phi.angle;theta.angle;psi.angle];
-simimu.quaternion = angle2quat(psi.angle',theta.angle',phi.angle','ZYX');
+%simimu.quaternion = angle2quat(psi.angle',theta.angle',phi.angle','ZYX');
 
 % Rotation of the rigid body
 Ax          = Aamp*(accel.noisestd);
