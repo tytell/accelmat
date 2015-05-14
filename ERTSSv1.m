@@ -15,7 +15,7 @@ dT       = [dT(1); dT];
 T       = dT(1);
 Pkm1      = [(Qgyro+Qbias)*T^2, -Qbias*T, zeros(3,3);-Qbias*T, Qbias,zeros(3,3);...
     zeros(3,6), Qdyn];
-gN      = [0,0,-1]';
+gN      = [0,0,1]';
 
 gN = gN/norm(gN);
 
