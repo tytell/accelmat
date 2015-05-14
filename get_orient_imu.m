@@ -1,13 +1,30 @@
 function imu = get_orient_imu(imu, varargin)
 
-opt.method = 'simple';
+opt.method = 'madgwick';        % or 'simple' or 'ertss'
 opt.gyrooffset = [-16 -8];
 opt.gyroband = [0.1 10];
+opt.accband = [0 30];
 opt.getoffset = false;
+opt.imuposition = [6.6 11.4 -7];        % distance from COM in mm
+opt.quiet = false;
+
+opt.beta = 0.05;
+opt.initwindow = 0.5;       % use the first 0.5 sec to initialize orientation
+
+opt.Qgyro = [];
+opt.constbiasgyro = [];
+opt.Qacc = [];
+opt.Qdyn = [];
+opt.Qbias = [];
+opt.Ca = 1.1;
+opt.knownorientind = [];
 
 opt = parsevarargin(opt,varargin,2);
 
 imu.rate = 1/mean(diff(imu.t));
+dt = 1/imu.rate;
+
+N = length(imu.t);
 
 %ideally we want a bandpass, but matlab doesn't do well with very
 %low cutoffs, so we do a running mean type operation to get rid of
@@ -24,84 +41,168 @@ end
 gyros = filtfilt(b,a, gyros);
 gyros = gyros - repmat(nanmean(gyros),[size(imu.gyro,1) 1]);
 
-%and then integrate to get orientation
-orient = cumtrapz(imu.t, gyros);
-
-
-if opt.getoffset
-    %filter the accelerometer signal to get an approximation of the gravity
-    %vector
-    [b,a] = butter(5,0.5/(imu.rate/2),'low');
-    %% Update 1.01 - obtain angular acceleration by differentiating gyro
-    % Note : gyro is a N X 3 vector
-    angacclo            = diff(gyro)./repmat(diff(imu.t),1,3); % (N-1) X 3 vector
-    % Approach 1 (may be wrong) - replicating the 1st element to make it N size
-    angacclo            = [angacclo(1,:);angacclo];
-    % Approach 2 curve fitting (correct)
-    % Need to do this	
-
-    % Convert the units first - deg to radians
-    imu.gyrocross       = crossProductMatrix(gyro*pi/180);
-    imu.angacclocross   = crossProductMatrix(angacclo*pi/180);
-    imu.correctiondist  = [0.1, 0.1, 0.2];  % Correction distance (1,3) in meters
-    for ii = 1:size(imu.acc,1)
-        imu.newacc(ii,:)  = imu.acc(ii,:) + imu.correctiondist*...
-            (imu.angacclocross(:,:,ii) + imu.gyrocross(:,:,ii)^2)';
-    end
-%     acclo = filtfilt(b,a,imu.acc);
-    acclo = filtfilt(b,a,imu.newacc);
-    
-    %normalize to a unit vecotr
-    mag = sqrt(sum(acclo.^2,2));
-    acclo = acclo ./ repmat(mag,[1 3]);
-
-    %try to get a good roll angle
-    orienta(:,1) = (pi + unwrap(atan2(acclo(:,2),acclo(:,3)))) * 180/pi;
-    if (any(orienta(:,1) > 345))
-        orienta(:,1) = orienta(:,1) - 360;
-    elseif (any(orienta(:,1) < -345))
-        orienta(:,1) = orienta(:,1) + 360;
-    end
-    %try to get pitch angle
-    orienta(:,2) = -(pi + unwrap(atan2(acclo(:,1),acclo(:,3)))) * 180/pi;
-    if (any(abs(orienta(:,2)) > 345))
-        orienta(:,2) = orienta(:,2) - sign(first(orienta(:,2),isfinite(orienta(:,2))))*360;
-    end
-    
-    %now try to eyeball the gyro offset so that it matches the initial
-    %accelerometer orientation estimates
-    off = [0 0];
-    done = false;
-    plot(imu.t, orient(:,1:2) - repmat(off,[size(orient,1) 1]));
-    addplot(imu.t, orienta, '--');
-
-    legend('Gyro x','Gyro y','Acc x','Acc y');
-    while ~done
-        off(1) = input('Gyro x offset?');
-        off(2) = input('Gyro y offset?');
+switch lower(opt.method)
+    case 'simple'
+        %have to be in radians
+        gyros = gyros*pi/180;
+        %convert to quaternions and integrate correctly to get orientation
         
-        plot(imu.t, orient(:,1:2) - repmat(off,[size(orient,1) 1]));
-        addplot(imu.t, orienta, '--');
-        legend('Gyro x','Gyro y','Acc x','Acc y');
+        %get the initial quaternion, assuming that the first half second of
+        %accelerometer data is a correct estimate of the orientation
+        isfirst = imu.t <= imu.t(1) + opt.initwindow;
+        acc1 = nanmean(imu.acc(isfirst,:));
+        acc1 = acc1 / norm(acc1);
+        ax = acc1(1);
+        ay = acc1(2);
+        az = acc1(3);
         
-        done = inputyn('OK? ','default',true);
-    end 
-else
-    off = opt.gyrooffset;
+        AXZ = ax*sqrt(1 - az);
+        AXY = sqrt(ax^2 + ay^2);
+        q0 = [0 ...
+            AXZ/(sqrt(2)*AXY) ...
+            ay*AXZ/(sqrt(2)*ax*AXY) ...
+            ax*AXY / (sqrt(2)*AXZ)];
+        
+        qgyro = zeros(N,4);
+        qgyro(1,:) = q0 / norm(q0);
+        gvec = zeros(N,3);
+        
+        for i = 2:N
+            qprev = qgyro(i-1,:);
+            
+            qdotgyro = 0.5 * quaternProd(qprev, [0 gyros(i,:)]);
+            qgyro(i,:) = qprev + qdotgyro * dt;
+            qgyro(i,:) = qgyro(i,:) / norm(qgyro(i,:));
+            
+            g1 = quaternProd(quaternConj(qgyro(i,:)), quaternProd([0 0 0 1], qgyro(i,:)));
+            gvec(i,:) = g1(2:4);
+        end
+        
+        imu.orient = quatern2euler(quaternConj(qgyro)) * 180/pi;
+        imu.rotmat = quatern2rotMat(quaternConj(qgyro));
+        imu.qorient = qgyro;
+        imu.gvec = gvec;
+        imu.accdyn = imu.acc - gvec;
+        
+    case 'madgwick'
+        %have to be in radians
+        gyros = gyros*pi/180;
+        
+        %filter the accelerometer data
+        if (opt.accband(1) > 0)
+            acclo = get_low_baseline(imu.t, imu.acc, opt.accband(1));
+            
+            accs = imu.acc - acclo;
+        else
+            accs = imu.acc;
+        end
+        
+        [b,a] = butter(5,opt.accband(2)/(imu.rate/2), 'low');
+        accs = filtfilt(b,a, accs);
+        
+        qorient = zeros(N,4);
+        
+        %get the initial quaternion, assuming that the first half second of
+        %accelerometer data is a correct estimate of the orientation
+        isfirst = imu.t <= imu.t(1) + opt.initwindow;
+        acc1 = nanmean(accs(isfirst,:));
+        acc1 = acc1 / norm(acc1);
+        ax = acc1(1);
+        ay = acc1(2);
+        az = acc1(3);
+        
+        AXZ = ax*sqrt(1 - az);
+        AXY = sqrt(ax^2 + ay^2);
+        q0 = [0 ...
+            AXZ/(sqrt(2)*AXY) ...
+            ay*AXZ/(sqrt(2)*ax*AXY) ...
+            ax*AXY / (sqrt(2)*AXZ)];
+        
+        qorient(1,:) = q0 / norm(q0);
+        
+        qgyro = zeros(N,4);
+        gvec = zeros(N,3);
+        
+        for i = 2:N
+            qprev = qorient(i-1,:);
+            
+            acc1 = accs(i,:);
+            acc1 = acc1 / norm(acc1);
+
+            %quaternion angular change from the gyro
+            qdotgyro = 0.5 * quaternProd(qprev, [0 gyros(i,:)]);
+            qgyro(i,:) = qprev + qdotgyro * dt;
+            
+            % Gradient descent algorithm corrective step
+            F = [2*(qprev(2)*qprev(4) - qprev(1)*qprev(3)) - acc1(1)
+                2*(qprev(1)*qprev(2) + qprev(3)*qprev(4)) - acc1(2)
+                2*(0.5 - qprev(2)^2 - qprev(3)^2) - acc1(3)];
+            J = [-2*qprev(3),	2*qprev(4),    -2*qprev(1),	2*qprev(2)
+                2*qprev(2),     2*qprev(1),     2*qprev(4),	2*qprev(3)
+                0,         -4*qprev(2),    -4*qprev(3),	0    ];
+            step = (J'*F);
+            step = step / norm(step);	% normalise step magnitude
+            
+            qdot = qdotgyro - opt.beta * step';
+            
+            qorient(i,:) = qprev + qdot * dt;
+            qorient(i,:) = qorient(i,:) / norm(qorient(i,:));
+            
+            %get the gravity vector from the orientation
+            g1 = quaternProd(quaternConj(qorient(i,:)), quaternProd([0 0 0 1], qorient(i,:)));
+            gvec(i,:) = g1(2:4);
+        end
+        
+        imu.orient = quatern2euler(quaternConj(qorient)) * 180/pi;
+        imu.rotmat = quatern2rotMat(quaternConj(qorient));
+        imu.qorient = qorient;
+        imu.gvec = gvec;
+        imu.accdyn = accs - gvec;
+        
+    case 'ertss'
+        %have to be in radians
+        gyros = gyros*pi/180;
+        
+        %filter the accelerometer data
+        if (opt.accband(1) > 0)
+            acclo = get_low_baseline(imu.t, imu.acc, opt.accband(1));
+            
+            accs = imu.acc - acclo;
+        else
+            accs = imu.acc;
+        end
+        
+        [b,a] = butter(5,opt.accband(2)/(imu.rate/2), 'low');
+        accs = filtfilt(b,a, accs);
+
+        if isempty(opt.Qgyro) || isempty(opt.Qacc)
+            error('Must have values for gyro and acceleration covariances (''Qgryo'' and ''Qacc'')');
+        end
+        
+        if isempty(opt.Qdyn)
+            opt.Qdyn            = 10*opt.Qacc;
+        end
+        if isempty(opt.Qbias)
+            opt.Qbias           = 0.05*opt.Qgyro;
+        end
+        
+        imu1 = imu;
+        imu1.gyro = gyros;
+        imu1.acc = accs;
+        
+        imu = get_orient_imu_ERTSS(imu1, opt.Qgyro,opt.Qbias,opt.Qacc,opt.Qdyn,opt.Ca, 'quiet',opt.quiet, ...
+            'knownorientind',opt.knownorientind);
 end
 
-orient(:,1) = orient(:,1) - off(1);
-orient(:,2) = orient(:,2) - off(2);
+angacclo = deriv(imu.t, gyros);
 
-orient = orient * pi/180;
-
-gvec = [sin(orient(:,2)) -sin(orient(:,1)) -cos(orient(:,2))];
-gvecmag = sqrt(sum(gvec.^2,2));
-gvec = gvec ./ repmat(gvecmag,[1 3]);
-
-imu.orient = orient;
-imu.acchi = imu.acc - gvec;
-
+% Convert the units first - deg to radians
+imu.gyrocross       = crossProductMatrix(gyros*pi/180);
+imu.angacclocross   = crossProductMatrix(angacclo*pi/180);
+imu.correctiondist  = opt.imuposition*1e-3;  % Correction distance (1,3) in meters
+for ii = 1:size(imu.acc,1)
+    imu.accdyn(ii,:)  = imu.accdyn(ii,:) + imu.correctiondist*...
+        (imu.angacclocross(:,:,ii) + imu.gyrocross(:,:,ii)^2)';
 end
 
 % Outputs the skew symmetric cross product matrix associated with cross
@@ -112,10 +213,13 @@ end
 % Input = theVector - N X 3
 % Output = theMatrix - 3 X 3 X N
 function [theMatrix] = crossProductMatrix(theVector)
-    theMatrix = zeros(3, 3,N);
-    for ii = 1:size(theVector,1)
-        theMartix(:,:,N) = [0, -theVector(ii,3), theVector(ii,2);
-            theVector(ii,3), 0, -theVector(ii,1);
-            -theVector(ii,2), theVector(ii,1), 0];
-    end
+
+N = size(theVector,1);
+theMatrix = zeros(3, 3,N);
+for ii = 1:size(theVector,1)
+    theMartix(:,:,N) = [0, -theVector(ii,3), theVector(ii,2);
+        theVector(ii,3), 0, -theVector(ii,1);
+        -theVector(ii,2), theVector(ii,1), 0];
 end
+
+

@@ -190,6 +190,12 @@ if opt.doplot
     
     X = emgpos(~isleft)+jit1(~isleft)+0.011;
     addplot([X(:) X(:)]', [burstonphase(~isleft) burstoffphase(~isleft)]', 'gs-');
+    
+    [~,~,emgind] = unique(emgpos);
+    onmn = accumarray(emgind(:),burstonphase(:), [], @(x) angmean(2*pi*x));
+    onmn = onmn/(2*pi);
+    offmn = accumarray(emgind(:),burstoffphase(:), [], @(x) angmean(2*pi*x));
+    offmn = offmn/(2*pi);
 end
 
 emg.curve = emgcurve;

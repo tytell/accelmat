@@ -26,9 +26,9 @@ steadythresh = 0.03;
 acccalibfile = 'rawdata/bg14/Accelerometer/calib001.h5';
 massdistfile = 'rawdata/fishmass.mat';
 
-emgfiles = {'rawdata/bg14/EMG/bg14_005.mat'};
-accfiles = {'rawdata/bg14/Accelerometer/bg14_005.h5'};
-kinfiles = {'rawdata/bg14/digitizeFish/Bg14_005.mat'};
+emgfiles = {'rawdata/bg14/EMG/bg14_002simple.mat'};
+accfiles = {'rawdata/bg14/Accelerometer/bg14_002.h5'};
+kinfiles = {'rawdata/bg14/digitizeFish/Bg14_002.mat'};
 outfile = 'rawdata/bg14/bg14data.csv';
 
 nfiles = length(emgfiles);
@@ -41,8 +41,8 @@ for f = 1:nfiles
     imu = load_imu(accfiles{f},acccalib,'resamplerate',200);
     switch accmethod
         case 'old'
-            imu = get_orient_imu_updated(imu,'imuposition',imuposition, ...
-                'getoffset',false,'gyrooffset',[-30 -29]);
+            imu = get_orient_imu(imu,'method','madgwick','imuposition',imuposition, ...
+                'beta',0.05);
     end
     
     emg = importLabChart(emgfiles{f},[],'outformat','new');

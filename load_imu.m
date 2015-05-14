@@ -6,23 +6,26 @@ opt.removeweirdblock = true;
 opt.resample = true;
 opt.resamplerate = [];
 opt.axisorder = {};     %{'-Y','-Z','X'};
+opt.constbiasgyro = [0 0 0];
 
-if (nargin == 1) 
+if (nargin == 1)
+    calib = struct([]);
     args = {};
-    calib.chip2world = eye(3);
-    calib.world2chip = eye(3);
     p = 2;
 elseif ischar(calib)
     args = [calib varargin];
-    calib.chip2world = eye(3);
-    calib.world2chip = eye(3);
+    calib = struct([]);
     p = 2;
 else
     args = varargin;
     p = 3;
 end
-    
+
 opt = parsevarargin(opt, args, p);
+
+if isempty(calib)
+    calib = struct('chip2world',eye(3), 'world2chip', eye(3));
+end
 
 acc = h5read(filename,'/Data/Accel');
 gyro = h5read(filename,'/Data/Gyro');
@@ -150,6 +153,9 @@ imu.t = t;
 imu.acc = acc * calib.chip2world;
 imu.acc_units = acc_units;
 imu.acc_range = acc_range;
+
+imu.const_bias_gyro = opt.constbiasgyro;
+gyro = gyro - repmat(opt.constbiasgyro,[size(gyro,1) 1]);
 imu.gyro = gyro * calib.chip2world;
 imu.gyro_units = gyro_units;
 imu.gyro_range = gyro_range;

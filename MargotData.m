@@ -1,33 +1,41 @@
 % Load data
 function MargotData()
 
-theNoise01      = load_imu('rawdata/bg14/Accelerometer/noisytest001.h5');
-theNoise01.gyro = deg2rad(theNoise01.gyro);
-Qgyro           = cov(theNoise01.gyro(1.5e4:8e4,:));
-constBiasGyro   = mean(theNoise01.gyro(1.5e4:8e4,:),1);
-Qacc            = cov(theNoise01.acc(100:8e4,:));
-constBiasAcc    = mean(theNoise01.acc(100:8e4,:),1);
+[~,acccalib] = load_imu('rawdata/bg14/Accelerometer/calib001.h5',[],'calib','axisorder',{'Y','Z','X'});
+
+noise      = load_imu('rawdata/bg14/Accelerometer/noisytest001.h5');
+
+good = noise.t >= (noise.t(end)-noise.t(1))/2;      % last half
+Qgyro           = cov(noise.gyro(good,:));
+constBiasGyro   = mean(noise.gyro(good,:),1);
+Qacc            = cov(noise.acc(good,:));
+constBiasAcc    = mean(noise.acc(good,:),1);
 Qdyn            = 10*Qacc;
 
-Qbias           = 0.05*Qgyro;
+Qbias           = zeros(3,3); %0.05*Qgyro;
+%Qbias(3,3) = 0;
 
-[~,acccalib] = load_imu('rawdata/bg14/Accelerometer/calib001.h5',[],'calib','axisorder',{'Y','-Z','-X'});
+imu0          = load_imu('rawdata/bg14/Accelerometer/bg14_002.h5',acccalib, ...
+    'constbiasgyro',constBiasGyro, 'resamplerate',200);
 
-theData         =  load_imu('rawdata/bg14/Accelerometer/bg14_015.h5');
-% Converting from degrees to radians for calculations
-theData.gyro = deg2rad(theData.gyro);
-% 
+knownyaw = round(linspace(1,length(imu0.t),2));
+imu0.realeulerrad = zeros(size(imu0.gyro'));
 
-theDattheData.gyro    = theData.gyro - repmat(constBiasGyro,NN,1);
+imu1 = get_orient_imu(imu0, 'method','simple');
+imu2 = get_orient_imu(imu0, 'method','madgwick', 'beta',0.05);
+imu3 = get_orient_imu(imu0, 'method','ertss', 'Qgyro',Qgyro, ...
+    'Qacc',Qacc, 'Qdyn',10*Qacc, 'Qbias',Qbias, 'Ca',1.8, 'knownorientind',knownyaw);
 
-% subtracting the constant bias from gyro readings
-theData.gyro    = theData.gyro - repmat(constBiasGyro,NN,1);
-good = theData.t >= -20;
-theData.gyro = theData.gyro(good,:);
-theData.acc = theData.acc(good,:);
-theData.t = theData.t(good,:);
+h(1) = subplot(4,1,1);
+plot(imu1.t, imu1.orient(:,1), imu2.t,imu2.orient(:,1), imu3.t,imu3.orient(:,1));
 
-knownyaw = round(linspace(1,length(theData.t),2));
-theData.realeulerrad = zeros(size(theData.gyro'));
+h(2) = subplot(4,1,2);
+plot(imu1.t, imu1.orient(:,2), imu2.t,imu2.orient(:,2), imu3.t,imu3.orient(:,2));
 
-results         = ERTSSv1(theData, Qgyro, Qbias, Qacc, Qdyn, 1.1, knownyaw);
+h(3) = subplot(4,1,3);
+plot(imu1.t, imu1.accdyn(:,1), imu2.t,imu2.accdyn(:,1), imu3.t,imu3.accdyn(:,1));
+
+h(4) = subplot(4,1,4);
+plot(imu1.t, imu1.accdyn(:,2), imu2.t,imu2.accdyn(:,2), imu3.t,imu3.accdyn(:,2));
+
+linkaxes(h,'x');
