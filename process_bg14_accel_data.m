@@ -1,16 +1,18 @@
 function process_bg14_accel_data
 
-accmethod = 'madgwick';
-smoothdur = 0.5;
-doplot = true;
-dodiagnostic = true;
+accmethod = 'madgwick';   % shouldn't need changing
+smoothdur = 0.5;% shouldn't need changing
+doplot = true;          % shouldn't need changing
+dodiagnostic = true;    % shouldn't need changing
 
+% shouldn't need changing
 nrunmedian = 7;
 duroutlierfrac = 0.8;
 freqoutlierfrac = 0.2;
 
-imuposition = [6.6 11.4 -7];
-emgposition.L1 = [1 0.42];
+% update per fish
+imuposition = [6.6 11.4 -7];        % relative to COM, x, y, z coord of IMU in mm
+emgposition.L1 = [1 0.42];          % 1 = L, 2 = R, and then position in fraction of L
 emgposition.L2 = [1 0.55];
 emgposition.L3 = [1 0.68];
 emgposition.L4 = [1 0.77];
@@ -19,6 +21,7 @@ emgposition.R2 = [2 0.55];
 emgposition.R3 = [2 0.68];
 emgposition.R4 = [2 0.77];
 
+% defaults for burst detection - shouldn't need to change
 threshold = [...
    -0.0693   -0.1221   -0.2544   -0.1476   -0.2329   -0.2227   -0.0895   -0.1222; ...
     0.0652    0.1203    0.2070    0.1311    0.2462    0.2650    0.1102    0.1441];
@@ -26,49 +29,51 @@ interburstdur = [0.05 0.05 0.05 0.05 0.05 0.05 0.05 0.05];
 minspikes = [1 1 3 3 1 3 1 2];
 goodchan = true(size(minspikes));
 
+% fraction of body length movement for beginning of acceleration
 steadythresh = 0.03;
 
-acccalibfile = 'rawdata/bg14/Accelerometer/calib001.h5';
-noisefile = 'rawdata/bg14/Accelerometer/noisytest001.h5';
+acccalibfile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/calib001.h5';
+noisefile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/noisytest001.h5';
 
-massdistfile = 'rawdata/fishmass.mat';
+massdistfile = 'fishmass.mat';
 
-emgfiles = {'rawdata/bg14/EMG/bg14_002simple.mat' ...
-    'rawdata/bg14/EMG/bg14_005.mat' ...
-    'rawdata/bg14/EMG/bg14_006.mat' ...
-    'rawdata/bg14/EMG/bg14_007.mat' ...
-    'rawdata/bg14/EMG/bg14_016.mat' ...
-    'rawdata/bg14/EMG/bg14_016.mat' ...
-    'rawdata/bg14/EMG/bg14_016.mat' ...
-    'rawdata/bg14/EMG/bg14_016.mat' ...
-    'rawdata/bg14/EMG/bg14_016.mat'};
-accfiles = {'rawdata/bg14/Accelerometer/bg14_002.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_005.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_006.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_007.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_016.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_016.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_016.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_016.h5' ...
-    'rawdata/bg14/Accelerometer/bg14_016.h5'};
-kinfiles = {'rawdata/bg14/digitizeFish/Bg14_002.mat'
-    'rawdata/bg14/digitizeFish/Bg14_005.mat'
-    'rawdata/bg14/digitizeFish/Bg14_006.mat'
-    'rawdata/bg14/digitizeFish/Bg14_007.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016c.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016d.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016e.mat'};
-outfile = 'rawdata/bg14/bg14data.csv';
-outmatfile = 'rawdata/bg14/bg14data.mat';
+emgfiles = {'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_002simple.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_005.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_006.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_007.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat'};
+accfiles = {'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_002.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_005.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_006.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_007.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5'};
+kinfiles = {'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_002.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_005.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_006.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_007.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016a.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016b.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016c.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016d.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016e.mat'};
+outfile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/bg14data.csv';
+outmatfile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/bg14data.mat';
 
+%don't change after here
 nfiles = length(emgfiles);
 
 [~,acccalib] = load_imu(acccalibfile,[],'calib','axisorder',{'Y','-Z','-X'});
 
 %get the noise and bias characteristics for the gyro
-noise      = load_imu('rawdata/bg14/Accelerometer/noisytest001.h5');
+noise      = load_imu(noisefile);
 
 good = noise.t >= (noise.t(end)-noise.t(1))/2;      % last half
 constBiasGyro   = mean(noise.gyro(good,:),1);
@@ -265,7 +270,7 @@ for f = 1:nfiles
     out(f).speedrms = repmat(kin1.comspeedfwdrms,[nchan 1]);
     out(f).headdisp = repmat(kin1.headdispfwdmn,[nchan 1]);
     out(f).headamp = repmat(kin1.amp(1,:),[nchan 1]);
-    out(f).tailamp = repmat(kin1.amp(1,:),[nchan 1]);
+    out(f).tailamp = repmat(kin1.amp(end,:),[nchan 1]);
     out(f).freq = repmat(1./kin1.per, [nchan 1]);
     out(f).wavespeed = repmat(kin1.wavespeed, [nchan 1]);
     out(f).wavelen = repmat(nanmean(kin1.wavelen), [nchan 1]);
