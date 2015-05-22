@@ -8,7 +8,7 @@ opt.getoffset = false;
 opt.imuposition = [6.6 11.4 -7];        % distance from COM in mm
 opt.quiet = false;
 
-opt.beta = 0.05;
+opt.beta = 2.86;            % deg/sec
 opt.initwindow = 0.5;       % use the first 0.5 sec to initialize orientation
 
 opt.Qgyro = [];
@@ -41,52 +41,15 @@ end
 gyros = filtfilt(b,a, gyros);
 gyros = gyros - repmat(nanmean(gyros),[size(imu.gyro,1) 1]);
 
-switch lower(opt.method)
-    case 'simple'
-        %have to be in radians
-        gyros = gyros*pi/180;
-        %convert to quaternions and integrate correctly to get orientation
-        
-        %get the initial quaternion, assuming that the first half second of
-        %accelerometer data is a correct estimate of the orientation
-        isfirst = imu.t <= imu.t(1) + opt.initwindow;
-        acc1 = nanmean(imu.acc(isfirst,:));
-        acc1 = acc1 / norm(acc1);
-        ax = acc1(1);
-        ay = acc1(2);
-        az = acc1(3);
-        
-        AXZ = ax*sqrt(1 - az);
-        AXY = sqrt(ax^2 + ay^2);
-        q0 = [0 ...
-            AXZ/(sqrt(2)*AXY) ...
-            ay*AXZ/(sqrt(2)*ax*AXY) ...
-            ax*AXY / (sqrt(2)*AXZ)];
-        
-        qgyro = zeros(N,4);
-        qgyro(1,:) = q0 / norm(q0);
-        gvec = zeros(N,3);
-        
-        for i = 2:N
-            qprev = qgyro(i-1,:);
-            
-            qdotgyro = 0.5 * quaternProd(qprev, [0 gyros(i,:)]);
-            qgyro(i,:) = qprev + qdotgyro * dt;
-            qgyro(i,:) = qgyro(i,:) / norm(qgyro(i,:));
-            
-            g1 = quaternProd(quaternConj(qgyro(i,:)), quaternProd([0 0 0 1], qgyro(i,:)));
-            gvec(i,:) = g1(2:4);
+switch lower(opt.method)        
+    case {'simple','madgwick'}
+        if strcmp(opt.method,'simple')
+            opt.beta = 0;
         end
         
-        imu.orient = quatern2euler(quaternConj(qgyro)) * 180/pi;
-        imu.rotmat = quatern2rotMat(quaternConj(qgyro));
-        imu.qorient = qgyro;
-        imu.gvec = gvec;
-        imu.accdyn = imu.acc - gvec;
-        
-    case 'madgwick'
         %have to be in radians
         gyros = gyros*pi/180;
+        opt.beta = opt.beta * pi/180;
         
         %filter the accelerometer data
         if (opt.accband(1) > 0)
@@ -103,10 +66,12 @@ switch lower(opt.method)
         qorient = zeros(N,4);
         
         %get the initial quaternion, assuming that the first half second of
-        %accelerometer data is a correct estimate of the orientation
+        %accelerometer data is a correct estimate of gravity
+        %flip the sign, because we want our orientation quaternion to tell
+        %us the direction of up
         isfirst = imu.t <= imu.t(1) + opt.initwindow;
         acc1 = nanmean(accs(isfirst,:));
-        acc1 = acc1 / norm(acc1);
+        acc1 = -acc1 / norm(acc1);
         ax = acc1(1);
         ay = acc1(2);
         az = acc1(3);
@@ -126,8 +91,9 @@ switch lower(opt.method)
         for i = 2:N
             qprev = qorient(i-1,:);
             
+            %flip the sign here
             acc1 = accs(i,:);
-            acc1 = acc1 / norm(acc1);
+            acc1 = -acc1 / norm(acc1);
 
             %quaternion angular change from the gyro
             qdotgyro = 0.5 * quaternProd(qprev, [0 gyros(i,:)]);
@@ -149,7 +115,8 @@ switch lower(opt.method)
             qorient(i,:) = qorient(i,:) / norm(qorient(i,:));
             
             %get the gravity vector from the orientation
-            g1 = quaternProd(quaternConj(qorient(i,:)), quaternProd([0 0 0 1], qorient(i,:)));
+            %remember gravity is -Z
+            g1 = quaternProd(quaternConj(qorient(i,:)), quaternProd([0 0 0 -1], qorient(i,:)));
             gvec(i,:) = g1(2:4);
         end
         

@@ -7,6 +7,7 @@ opt.resample = true;
 opt.resamplerate = [];
 opt.axisorder = {};     %{'-Y','-Z','X'};
 opt.constbiasgyro = [0 0 0];
+opt.timerange = [];
 
 if (nargin == 1)
     calib = struct([]);
@@ -83,6 +84,16 @@ else
     t0 = first(t,isfinite(t));
 end
 t = t-t0;
+
+if ~isempty(opt.timerange)
+    istime = (t >= opt.timerange(1)) & (t < opt.timerange(2));
+    acc = acc(istime,:);
+    gyro = gyro(istime,:);
+    t = t(istime);
+    istrigger = istrigger(istime);
+    iszero = iszero(istime);
+end
+
 
 if opt.calib
     if opt.clickzero
