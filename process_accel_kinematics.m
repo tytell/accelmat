@@ -10,6 +10,26 @@ opt = parsevarargin(opt,varargin, 2);
 load(filename,'exs','eys','scale','fishlenmm','haxmmss','haymmss','humms','hvmms',...
     'hxmm','hymm','hxs','hys','t','txmm','tymm','txs','tys');
 
+good = isfinite(txmm) & isfinite(tymm);
+
+t0 = t(end);
+t = t(good) - t0;
+
+exs = exs(:,good);
+eys = eys(:,good);
+haxmmss = haxmmss(good);
+haymmss = haymmss(good);
+humms = humms(good);
+hvmms = hvmms(good);
+hxmm = hxmm(good);
+hymm = hymm(good);
+hxs = hxs(good);
+hys = hys(good);
+txmm = txmm(good);
+tymm = tymm(good);
+txs = txs(good);
+tys = tys(good);
+
 %reorder the points so that they go from head to tail
 %first get the head to tail axis
 htx = txs - hxs;
@@ -296,8 +316,13 @@ end
 
 wavespeed = NaN(1,size(indpeak,2));
 for pk = 1:size(indpeak,2)
-    p = polyfit(tcurvepeak(2:end,pk),smm(2:end),1);
-    wavespeed(pk) = p(1);
+    tc1 = tcurvepeak(2:end,pk);
+    s1 = smm(2:end);
+    good = isfinite(tc1);
+    if sum(good) > 3
+        p = polyfit(tc1(good),s1(good),1);
+        wavespeed(pk) = p(1);
+    end
 end
 
 per = 2*diff(tpeak,[],2);

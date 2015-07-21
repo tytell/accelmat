@@ -30,9 +30,9 @@ tpeak = kin.tpeak(end,:);
 imudt = imu.t(2) - imu.t(1);
 ind2 = round((tpeak - imu.t(1)) / imudt) + 1;
 
-accs = NaN(size(imu.acchi));
+accs = NaN(size(imu.accdyn));
 for i = 1:3
-    sp = spaps(imu.t(span2), imu.acchi(span2,i), opt.accerr(i).^2);
+    sp = spaps(imu.t(span2), imu.accdyn(span2,i), opt.accerr(i).^2);
     accs(span2,i) = fnval(sp, imu.t(span2));
 end
 
@@ -43,7 +43,7 @@ orientmean = NaN(3,length(ind2));
 orientstd = NaN(3,length(ind2));
 
 for i = 2:length(ind2)-1
-    if any(~isfinite(ind2(i:i+1)))
+    if any(~isfinite(ind2(i-1:i+1)))
         continue;
     end
     k = ind2(i-1):ind2(i+1);
@@ -51,10 +51,10 @@ for i = 2:length(ind2)-1
     
     for j = 1:3
         if any(isfinite(tailphase2(k))) && any(isfinite(accs(k,j)))
-            % peak is the 95 perctile forward acceleration for each half
+            % peak is the 99 perctile forward acceleration for each half
             % tail beat
             if (j == 1)
-                pk = prctile(accs(k2,1),95);
+                pk = prctile(accs(k2,1),99);
                 accfwdpk(1,i) = pk;
             end
             % iqr and mean are taken over the whole tail beat

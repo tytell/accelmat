@@ -4,9 +4,10 @@ opt.interburstdur = [];
 opt.spikethreshold = [];
 opt.minspikes = [];
 opt.goodchan = logical([]);
+opt.override = struct([]);
 opt.trigger = 'falling';
 opt.emgposition = struct([]);
-opt.doplot = true;
+opt.doplot = false;
 
 opt = parsevarargin(opt, varargin, 3);
 
@@ -51,7 +52,7 @@ if ~isempty(opt.spikethreshold) && ~isempty(opt.interburstdur) && ...
         ~isempty(opt.minspikes) && ~isempty(opt.goodchan)
     data = findbursts_gui(t(span), chan(span,:), 'interburstdur',opt.interburstdur, ...
         'threshold',opt.spikethreshold, 'minspikes',opt.minspikes, ...
-        'goodchan',opt.goodchan,'quiet');
+        'goodchan',opt.goodchan, 'override',opt.override);
 else
     data = findbursts_gui(t(span),chan(span,:));
 end
@@ -63,7 +64,10 @@ nwave = size(kin.tcurvepeak,2);
 nfr = size(kin.curve,2);
 emgcurve = NaN(nchan,nfr);
 for f = 1:size(kin.curve,2)
-    emgcurve1 = interp1(kin.s(2:end-1),kin.curve(2:end-1,f), emgposition(:,2));
+    s1 = kin.s;
+    c1 = kin.curve(:,f);
+    c1([1 end]) = 0;
+    emgcurve1 = interp1(s1,c1, emgposition(:,2));
     emgcurve(:,f) = emgcurve1;    
 end
 
@@ -198,7 +202,15 @@ if opt.doplot
     offmn = offmn/(2*pi);
 end
 
+emg.pos = emgposition(:,2);
+emg.side = emgposition(:,1);
 emg.curve = emgcurve;
+emg.burst = data.burst;
+emg.spikethreshold = data.spikethreshold;
+emg.interburstdur = data.interburstdur;
+emg.minspikes = data.minspikes;
+emg.goodchan = data.goodchan;
+emg.burstoverride = data.override;
 emg.burston = burston;
 emg.burstoff = burstoff;
 emg.burstctr = burstctr;

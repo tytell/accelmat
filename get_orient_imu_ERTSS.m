@@ -31,8 +31,8 @@ if ~isempty(opt.initwindow)
     accmn = nanmean(imu.acc(isfirst,:));
     accmn = accmn / norm(accmn);
     
-    r = atan2(accmn(2),accmn(3));
-    p = atan2(accmn(1),accmn(3));
+    r = atan2(accmn(2),-accmn(3));
+    p = atan2(accmn(1),-accmn(3));
     
     xkm1(1:3) = [r p 0];
 end
@@ -42,7 +42,7 @@ dT       = [dT(1); dT];
 T       = dT(1);
 Pkm1      = [(Qgyro+Qbias)*T^2, -Qbias*T, zeros(3,3);-Qbias*T, Qbias,zeros(3,3);...
     zeros(3,6), Qdyn];
-gN      = [0,0,-1]';
+gN      = [0; 0; -1];
 
 gN = gN/norm(gN);
 
