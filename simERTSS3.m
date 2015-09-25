@@ -35,9 +35,10 @@ PkEKF       = zeros(9,9,NN);    % innovation covariance matrices
 err         = zeros(3,NN);      %
 
 % the data point where 'yaw' is known
-knownN = sort(floor(random('unif',1,NN,20,1)));
-knownN = [1;knownN;NN];
+%knownN = sort(floor(random('unif',1,NN,20,1)));
+%knownN = [1;knownN;NN];
 % knownN = [1;NN];
+knownN = linspace(1,NN,10)';
 
 tic
 % Step 3 - FORWARD FILTERING STEP
@@ -117,6 +118,7 @@ toc
 %         'R Fwd-Bkwd','P Fwd-Bkwd','Y Fwd-Bkwd');
 %     results.Bias = omegaBias;
     results.euler = eulerS;
+    results.accdyn = cat(2,aD,NaN(3,1));
     subplot(2,1,2);
     plot(aD')
     hold on;

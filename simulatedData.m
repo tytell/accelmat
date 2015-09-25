@@ -1,24 +1,24 @@
 % This function generates simulated IMU data of a virtual fish
 
 function [simimu] = simulatedData(timelength,varargin)
-Aamp = 0;
-if(not(isempty(varargin)))
-    for ii=1:2:length(varargin)
-        if(strcmp(varargin(ii),'Aamp'))
-            Aamp = cell2mat(varargin(ii+1));
-        end
-    end
-end
+
+opt.Aamp = 0;
+opt.biasamp = 1;
+
+opt = parsevarargin(opt, varargin, 2);
+Aamp = opt.Aamp;
+biasamp = opt.biasamp;
+
 % keyboard
-calibmillisecs = 1000;
+calibmillisecs = 100;
 % timelingth = 4;
-samplefreq	= 1e-3;     % 1 KHz
+samplefreq	= 1e-2;     % 100 Hz
 time        = 0:samplefreq:timelength; % in seconds
 % Accelerometer (datesheet) quantities
-accel.noisestd  = (3e-4*sqrt(0.5/samplefreq));          % unit = g (9.81 m/s2)
+accel.noisestd  = 2*(3e-4*sqrt(0.5/samplefreq));          % unit = g (9.81 m/s2)
 % Gyroscope (datasheet) quantities
-gyro.noisestd   = deg2rad(0.01*sqrt(0.5/samplefreq)); % unit = radians
-gyro.biasstd    = gyro.noisestd;
+gyro.noisestd   = 10*deg2rad(0.01*sqrt(0.5/samplefreq)); % unit = radians
+gyro.biasstd    = biasamp * gyro.noisestd;
 % Simulation characteristics
 freq        = 0.5;
 
