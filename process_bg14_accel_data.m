@@ -1,16 +1,18 @@
 function process_bg14_accel_data
 
-accmethod = 'madgwick';
-smoothdur = 0.5;
-doplot = true;
-dodiagnostic = true;
+accmethod = 'madgwick';   % shouldn't need changing
+smoothdur = 0.5;% shouldn't need changing
+doplot = true;          % shouldn't need changing
+dodiagnostic = true;    % shouldn't need changing
 
+% shouldn't need changing
 nrunmedian = 7;
 duroutlierfrac = 0.8;
 freqoutlierfrac = 0.2;
 
-imuposition = [6.6 11.4 -7];
-emgposition.L1 = [1 0.42];
+% update per fish
+imuposition = [6.6 11.4 -7];        % relative to COM, x, y, z coord of IMU in mm
+emgposition.L1 = [1 0.42];          % 1 = L, 2 = R, and then position in fraction of L
 emgposition.L2 = [1 0.55];
 emgposition.L3 = [1 0.68];
 emgposition.L4 = [1 0.77];
@@ -19,6 +21,7 @@ emgposition.R2 = [2 0.55];
 emgposition.R3 = [2 0.68];
 emgposition.R4 = [2 0.77];
 
+% defaults for burst detection - shouldn't need to change
 threshold = [...
    -0.0693   -0.1221   -0.2544   -0.1476   -0.2329   -0.2227   -0.0895   -0.1222; ...
     0.0652    0.1203    0.2070    0.1311    0.2462    0.2650    0.1102    0.1441];
@@ -26,191 +29,51 @@ interburstdur = [0.05 0.05 0.05 0.05 0.05 0.05 0.05 0.05];
 minspikes = [1 1 3 3 1 3 1 2];
 goodchan = true(size(minspikes));
 
+% fraction of body length movement for beginning of acceleration
 steadythresh = 0.03;
 
-acccalibfile = 'rawdata/bg14/Accelerometer/calib001.h5';
-noisefile = 'rawdata/bg14/Accelerometer/noisytest001.h5';
+acccalibfile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/calib001.h5';
+noisefile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/noisytest001.h5';
 
-massdistfile = './fishmass.mat';
+massdistfile = 'fishmass.mat';
 
-emgfiles = { 'rawdata/bg14/EMG/bg14_001.mat'
-    'rawdata/bg14/EMG/bg14_002.mat'
-    'rawdata/bg14/EMG/bg14_003.mat'
-    'rawdata/bg14/EMG/bg14_003.mat'
-    'rawdata/bg14/EMG/bg14_004.mat'
-    'rawdata/bg14/EMG/bg14_005.mat'
-    'rawdata/bg14/EMG/bg14_006.mat'
-    'rawdata/bg14/EMG/bg14_007.mat'
-    'rawdata/bg14/EMG/bg14_008.mat'
-    'rawdata/bg14/EMG/bg14_009.mat'
-    'rawdata/bg14/EMG/bg14_010.mat'
-    'rawdata/bg14/EMG/bg14_011.mat'
-    'rawdata/bg14/EMG/bg14_011.mat'
-    'rawdata/bg14/EMG/bg14_011.mat'
-    'rawdata/bg14/EMG/bg14_012.mat'
-    'rawdata/bg14/EMG/bg14_013.mat'
-    'rawdata/bg14/EMG/bg14_014.mat'
-    'rawdata/bg14/EMG/bg14_014.mat'
-    'rawdata/bg14/EMG/bg14_014.mat'
-    'rawdata/bg14/EMG/bg14_014.mat'
-    'rawdata/bg14/EMG/bg14_015.mat'
-    'rawdata/bg14/EMG/bg14_015.mat'
-    'rawdata/bg14/EMG/bg14_016.mat'
-    'rawdata/bg14/EMG/bg14_016.mat'
-    'rawdata/bg14/EMG/bg14_016.mat'
-    'rawdata/bg14/EMG/bg14_016.mat'
-    'rawdata/bg14/EMG/bg14_016.mat'
-    'rawdata/bg14/EMG/bg14_017.mat'
-    'rawdata/bg14/EMG/bg14_017.mat'
-    'rawdata/bg14/EMG/bg14_018.mat'
-    'rawdata/bg14/EMG/bg14_018.mat'
-    'rawdata/bg14/EMG/bg14_019.mat'
-    'rawdata/bg14/EMG/bg14_020.mat' };
-%     'rawdata/bg14/EMG/bg14_021.mat'
-%     'rawdata/bg14/EMG/bg14_022.mat'
-%     'rawdata/bg14/EMG/bg14_023.mat'
-%     'rawdata/bg14/EMG/bg14_024.mat'
-%     'rawdata/bg14/EMG/bg14_025.mat'
-%     'rawdata/bg14/EMG/bg14_026.mat'
-%     'rawdata/bg14/EMG/bg14_027.mat'
-%     'rawdata/bg14/EMG/bg14_027.mat'
-%     'rawdata/bg14/EMG/bg14_028.mat'
-%     'rawdata/bg14/EMG/bg14_028.mat'
-%     'rawdata/bg14/EMG/bg14_029.mat'
-%     'rawdata/bg14/EMG/bg14_030.mat'
-%     'rawdata/bg14/EMG/bg14_031.mat'
-%     'rawdata/bg14/EMG/bg14_032.mat'};
-accfiles = {'rawdata/bg14/Accelerometer/bg14_001.h5'
-    'rawdata/bg14/Accelerometer/bg14_002.h5'
-    'rawdata/bg14/Accelerometer/bg14_003.h5'
-    'rawdata/bg14/Accelerometer/bg14_003.h5'
-    'rawdata/bg14/Accelerometer/bg14_004.h5'
-    'rawdata/bg14/Accelerometer/bg14_005.h5'
-    'rawdata/bg14/Accelerometer/bg14_006.h5'
-    'rawdata/bg14/Accelerometer/bg14_007.h5'
-    'rawdata/bg14/Accelerometer/bg14_008.h5'
-    'rawdata/bg14/Accelerometer/bg14_009.h5'
-    'rawdata/bg14/Accelerometer/bg14_010.h5'
-    'rawdata/bg14/Accelerometer/bg14_011.h5'
-    'rawdata/bg14/Accelerometer/bg14_011.h5'
-    'rawdata/bg14/Accelerometer/bg14_011.h5'
-    'rawdata/bg14/Accelerometer/bg14_012.h5'
-    'rawdata/bg14/Accelerometer/bg14_013.h5'
-    'rawdata/bg14/Accelerometer/bg14_014.h5'
-    'rawdata/bg14/Accelerometer/bg14_014.h5'
-    'rawdata/bg14/Accelerometer/bg14_014.h5'
-    'rawdata/bg14/Accelerometer/bg14_014.h5'
-    'rawdata/bg14/Accelerometer/bg14_015.h5'
-    'rawdata/bg14/Accelerometer/bg14_015.h5'
-    'rawdata/bg14/Accelerometer/bg14_016.h5'
-    'rawdata/bg14/Accelerometer/bg14_016.h5'
-    'rawdata/bg14/Accelerometer/bg14_016.h5'
-    'rawdata/bg14/Accelerometer/bg14_016.h5'
-    'rawdata/bg14/Accelerometer/bg14_016.h5'
-    'rawdata/bg14/Accelerometer/bg14_017.h5'
-    'rawdata/bg14/Accelerometer/bg14_017.h5'
-    'rawdata/bg14/Accelerometer/bg14_018.h5'
-    'rawdata/bg14/Accelerometer/bg14_018.h5'
-    'rawdata/bg14/Accelerometer/bg14_019.h5'
-    'rawdata/bg14/Accelerometer/bg14_020.h5' };
-%    'rawdata/bg14/Accelerometer/bg14_021.h5'
-%     'rawdata/bg14/Accelerometer/bg14_022.h5'
-%     'rawdata/bg14/Accelerometer/bg14_023.h5'
-%     'rawdata/bg14/Accelerometer/bg14_024.h5'
-%     'rawdata/bg14/Accelerometer/bg14_025.h5'
-%     'rawdata/bg14/Accelerometer/bg14_026.h5'
-%     'rawdata/bg14/Accelerometer/bg14_027.h5'
-%     'rawdata/bg14/Accelerometer/bg14_027.h5'
-%     'rawdata/bg14/Accelerometer/bg14_028.h5'
-%     'rawdata/bg14/Accelerometer/bg14_028.h5'
-%     'rawdata/bg14/Accelerometer/bg14_029.h5'
-%     'rawdata/bg14/Accelerometer/bg14_030.h5'
-%     'rawdata/bg14/Accelerometer/bg14_031.h5'
-%     'rawdata/bg14/Accelerometer/bg14_032.h5'};
-kinfiles = { 'rawdata/bg14/digitizeFish/Bg14_001.mat'
-    'rawdata/bg14/digitizeFish/Bg14_002.mat'
-    'rawdata/bg14/digitizeFish/Bg14_003a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_003b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_004.mat'
-    'rawdata/bg14/digitizeFish/Bg14_005.mat'
-    'rawdata/bg14/digitizeFish/Bg14_006.mat'
-    'rawdata/bg14/digitizeFish/Bg14_007.mat'
-    'rawdata/bg14/digitizeFish/Bg14_008.mat'
-    'rawdata/bg14/digitizeFish/Bg14_009.mat'
-    'rawdata/bg14/digitizeFish/Bg14_010.mat'
-    'rawdata/bg14/digitizeFish/Bg14_011a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_011b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_011c.mat'
-    'rawdata/bg14/digitizeFish/Bg14_012.mat'
-    'rawdata/bg14/digitizeFish/Bg14_013.mat'
-    'rawdata/bg14/digitizeFish/Bg14_014a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_014b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_014c.mat'
-    'rawdata/bg14/digitizeFish/Bg14_014d.mat'
-    'rawdata/bg14/digitizeFish/Bg14_015a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_015b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016c.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016d.mat'
-    'rawdata/bg14/digitizeFish/Bg14_016e.mat'
-    'rawdata/bg14/digitizeFish/Bg14_017a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_017b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_018a.mat'
-    'rawdata/bg14/digitizeFish/Bg14_018b.mat'
-    'rawdata/bg14/digitizeFish/Bg14_019.mat'
-    'rawdata/bg14/digitizeFish/Bg14_020.mat' };
-%     'rawdata/bg14/digitizeFish/Bg14_021.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_022.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_023.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_024.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_025.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_026.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_027a.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_027b.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_028a.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_028b.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_029.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_030.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_031.mat'
-%     'rawdata/bg14/digitizeFish/Bg14_032.mat'};
-outfile = 'rawdata/bg14/bg14data.csv';
-outmatfile = 'rawdata/bg14/bg14data.mat';
+emgfiles = {'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_002simple.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_005.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_006.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_007.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat' ...
+    'T:\Bluegill Acceleration\2015-03-26 Bg14\EMGs/bg14_016.mat'};
+accfiles = {'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_002.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_005.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_006.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_007.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5' ...
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Accelerometer/bg14_016.h5'};
+kinfiles = {'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_002.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_005.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_006.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_007.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016a.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016b.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016c.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016d.mat'
+    'T:/Bluegill Acceleration/2015-03-26 Bg14/Bg14 digitizeFish files/Bg14_016e.mat'};
+outfile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/bg14data.csv';
+outmatfile = 'T:/Bluegill Acceleration/2015-03-26 Bg14/bg14data.mat';
 
-for f = 1:min([length(emgfiles) length(accfiles) length(kinfiles)])
-    if ~exist(emgfiles{f},'file')
-        warning('File %s not found.  Trial will be skipped.\n', emgfiles{f});
-    end
-    if ~exist(accfiles{f},'file')
-        warning('File %s not found.  Trial will be skipped.\n', accfiles{f});
-    end
-    if ~exist(kinfiles{f},'file')
-        warning('File %s not found.  Trial will be skipped.\n', kinfiles{f});
-    end
-    
-    [~,emgfile1,~] = fileparts(emgfiles{f});
-    [~,accfile1,~] = fileparts(accfiles{f});
-    [~,kinfile1,~] = fileparts(kinfiles{f});
-    emgtok = regexp(emgfile1, '[Bb]g(\d+)_(\d+)([a-z]?)', 'tokens','once');
-    acctok = regexp(accfile1, '[Bb]g(\d+)_(\d+)([a-z]?)', 'tokens','once');
-    kintok = regexp(kinfile1, '[Bb]g(\d+)_(\d+)([a-z]?)', 'tokens','once');
-    
-    if (str2double(emgtok{1}) ~= str2double(acctok{1})) || ...
-            (str2double(emgtok{1}) ~= str2double(kintok{1}))
-        error('Fish numbers do not match: %s %s %s\n', emgfile1, accfile1, kinfile1);
-    end
-    if (str2double(emgtok{2}) ~= str2double(acctok{2})) || ...
-            (str2double(emgtok{2}) ~= str2double(kintok{2}))
-        error('Trial numbers do not match: %s %s %s\n', emgfile1, accfile1, kinfile1);
-    end
-end    
-
+%don't change after here
 nfiles = length(emgfiles);
 
 [~,acccalib] = load_imu(acccalibfile,[],'calib','axisorder',{'Y','-Z','-X'});
 
 %get the noise and bias characteristics for the gyro
-noise      = load_imu('rawdata/bg14/Accelerometer/noisytest001.h5');
+noise      = load_imu(noisefile);
 
 good = noise.t >= (noise.t(end)-noise.t(1))/2;      % last half
 constBiasGyro   = mean(noise.gyro(good,:),1);
@@ -230,19 +93,6 @@ end
 nprev = length(Kinematics);
 
 for f = 1:nfiles
-    if ~exist(kinfiles{f},'file')
-        fprintf('%s not found.  Skipping.\n', kinfiles{f});
-        continue;
-    end
-    if ~exist(accfiles{f},'file')
-        fprintf('%s not found.  Skipping.\n', accfiles{f});
-        continue;
-    end
-    if ~exist(emgfiles{f},'file')
-        fprintf('%s not found.  Skipping.\n', emgfiles{f});
-        continue;
-    end
-        
     fprintf('*** %s\n', kinfiles{f});
     if ((f > nprev) || isempty(Kinematics(f).t) || ...
             inputyn('Reload kinematics data?','default',false))
@@ -449,5 +299,4 @@ for f = 1:nfiles
     out(f).burstint = emg1.burstint;
 end
 
-putvar out;
 save_struct_as_table(outfile, out);
