@@ -202,11 +202,11 @@ for f = 1:nfiles
     out(f).yawstd = repmat(acc.orientstd(3,:), [nchan 1]);
     
     out(f).vxcirc = repmat(piv1.vxcirc, [nchan 1]);
-    out(f).vxcircstd = repmat(piv1.vxcirc, [nchan 1]);
+    out(f).vxcircstd = repmat(piv1.vxcircstd, [nchan 1]);
     out(f).vxprevcirc = repmat(piv1.vxcirc, [nchan 1]);
-    out(f).vxprevcircstd = repmat(piv1.vxcirc, [nchan 1]);
+    out(f).vxprevcircstd = repmat(piv1.vxcircstd, [nchan 1]);
     out(f).vxdist = repmat(piv1.vxcirc, [nchan 1]);
-    out(f).vxdiststd = repmat(piv1.vxcirc, [nchan 1]);
+    out(f).vxdiststd = repmat(piv1.vxcircstd, [nchan 1]);
 end
 
 putvar out;

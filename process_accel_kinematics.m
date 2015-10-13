@@ -9,10 +9,13 @@ opt.sampfreq = [];
 
 opt = parsevarargin(opt,varargin, 2);
 
+W = warning;
+warning('off','MATLAB:load:variableNotFound');
 load(filename,'exs','eys','scale','fishlenmm','haxmmss','haymmss','humms','hvmms',...
     'hxmm','hymm','hxs','hys','t','txmm','tymm','txs','tys','fps');
+warning(W);
 
-if exist('exs','var')
+if exist('exs','var') && ~isempty(exs) && any(~isnan(exs))
     ismidline = true;
 else
     ismidline = false;
