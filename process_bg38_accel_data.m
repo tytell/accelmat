@@ -4,61 +4,84 @@ accmethod = 'madgwick';
 smoothdur = 0.5;
 leftsidevortexsign = -1;
 
-doplot = true;
-dodiagnostic = true;
-
-fishlen = 130;       % mm
+fishlen = 148;       % mm
 
 sampfreq = 100;
 
-imuposition = [6.6 11.4 -7];
+imuposition = [7.2 7.1 -15];        % x y z coords in mm
 
-steadythresh = 0.03;
+steadythresh = 0.03;    
 
-acccalibfile = 'rawdata/bg38/calib001.h5';
-massdistfile = './fishmass.mat';
+acccalibfile = 'rawdata/bg38/calib001.h5'; %'F:\Accelerometer h5\accelerometer bg38/calib001.h5'; %fill in here
+massdistfile = 'fishmass.mat'; % or 'C:\Code\accelmat\fishmass.mat';
+noisefile = 'rawdata/bg38/bg38 10min test 001.h5'; % or 'F:\Accelerometer h5\accelerometer bg38/bg38 10min test 001.h5';
+
+baseaccdir = 'rawdata/bg38';    % or 'F:\Accelerometer h5\accelerometer bg38'
+basekindir = 'rawdata/bg38';    % or 'F:\Digitize Fish\digitize fish bg38'
+basepivdir = 'rawdata/bg38';    % or 'F:\Analyze PIV\analyzepiv bg38'
 
 accfiles = {
-    'rawdata/bg38/bg38_011.h5'
-    'rawdata/bg38/bg38_015.h5'
-    'rawdata/bg38/bg38_019.h5'
-    'rawdata/bg38/bg38_023.h5'
+    'bg38_023.h5'
+    'bg38_024.h5'
+    'bg38_024.h5'
+    'bg38_024.h5'
+    'bg38_017.h5'
+    'bg38_019.h5'
     };
 kinfiles = { 
-    'rawdata/bg38/bg38 16_5Hz 011.mat'
-    'rawdata/bg38/bg38 16_5Hz 015.mat'
-    'rawdata/bg38/bg38 21_3Hz 019.mat'
-    'rawdata/bg38/bg38 21_3Hz 023.mat'
+    'bg38 21_3Hz 023.mat'
+    'bg38 21_3Hz 024 Part 1.mat'
+    'bg38 21_3Hz 024 Part 2.mat'
+    'bg38 21_3Hz 024 Part 3.mat'
+    'bg38 21_3Hz 017.mat'
+    'bg38 21_3Hz 019.mat'
     };
 pivfiles = { 
-    'rawdata/bg38/bg38 16_5Hz 011 vortex.mat'
-    'rawdata/bg38/bg38 16_5Hz 015 vortex.mat'
-    'rawdata/bg38/bg38 21_3Hz 019 vortex.mat'
-    'rawdata/bg38/bg38 21_3Hz 023 vortex.mat'
+    'bg38 21_3Hz 023 vortex.mat'
+    'bg38 21_3Hz 024 vortex.mat'
+    'bg38 21_3Hz 024 vortex.mat'
+    'bg38 21_3Hz 024 vortex.mat'
+    'bg38 21_3Hz 017 vortex.mat'
+    'bg38 21_3Hz 019 vortex.mat'
     };
 
-outfile = 'rawdata/bg38/bg38data.csv';
-outmatfile = 'rawdata/bg38/bg38data.mat';
+outfile = 'bg38 2BLs test.csv'; % or 'F:\Data\Bg38 data/bg38 2BLs test.csv';
+outmatfile = 'bg38 2BLs test.mat'; % or 'F:\Data\Bg38 data/bg38 2BLs test.mat';
 
 %get the noise and bias characteristics for the gyro
-noise      = load_imu('rawdata/bg38/noisytest001.h5');
+noise      = load_imu(noisefile);
 
 good = noise.t >= (noise.t(end)-noise.t(1))/2;      % last half
 constBiasGyro   = mean(noise.gyro(good,:),1);
 beta = sqrt(3/4) * 2*max(rms(noise.gyro(good,:)));
 
-for f = 1:min([length(accfiles) length(kinfiles)])
+if (length(accfiles) ~= length(kinfiles)) || (length(accfiles) ~= length(pivfiles))
+    error('Different numbers of accelerometer, kinematics, or PIV files!');
+end
+
+for f = 1:length(accfiles)
+    accfiles{f} = fullfile(baseaccdir,accfiles{f});
+    kinfiles{f} = fullfile(basekindir,kinfiles{f});
+    pivfiles{f} = fullfile(basepivdir,pivfiles{f});
+end
+
+for f = 1:length(accfiles)
     if ~exist(accfiles{f},'file')
         warning('File %s not found.  Trial will be skipped.\n', accfiles{f});
     end
     if ~exist(kinfiles{f},'file')
         warning('File %s not found.  Trial will be skipped.\n', kinfiles{f});
     end
+    if ~exist(pivfiles{f},'file')
+        warning('File %s not found.  Trial will be skipped.\n', pivfiles{f});
+    end
     
     [~,accfile1,~] = fileparts(accfiles{f});
     [~,kinfile1,~] = fileparts(kinfiles{f});
+    [~,pivfile1,~] = fileparts(pivfiles{f});
     acctok = regexp(accfile1, '[Bb]g(\d+)[ _](\d+)([a-z]?)$', 'tokens','once');
-    kintok = regexp(kinfile1, '[Bb]g(\d+)[ _].*[ _\-](\d+)([a-z]?)$', 'tokens','once');
+    kintok = regexp(kinfile1, '[Bb]g(\d+) [\d_]+Hz (\d+)([a-z]?)( Part \d+)?$', 'tokens','once');
+    pivtok = regexp(pivfile1, '[Bb]g(\d+) [\d_]+Hz (\d+)([a-z]?) vortex$', 'tokens','once');
     
     if isempty(acctok)
         error('Cannot parse file name %s\n', accfile1);
@@ -67,11 +90,13 @@ for f = 1:min([length(accfiles) length(kinfiles)])
         error('Cannot parse file name %s\n', kinfile1);
     end
     
-    if (str2double(acctok{1}) ~= str2double(kintok{1}))
-        error('Fish numbers do not match: %s %s\n', accfile1, kinfile1);
+    if ((str2double(acctok{1}) ~= str2double(kintok{1})) || ...
+        (str2double(acctok{1}) ~= str2double(pivtok{1})))
+        error('Fish numbers do not match: %s %s %s\n', accfile1, kinfile1, pivfile1);
     end
-    if (str2double(acctok{2}) ~= str2double(kintok{2}))
-        error('Trial numbers do not match: %s %s\n', accfile1, kinfile1);
+    if (str2double(acctok{2}) ~= str2double(kintok{2})) || ...
+        (str2double(acctok{2}) ~= str2double(pivtok{2}))
+        error('Trial numbers do not match: %s %s %s\n', accfile1, kinfile1, pivfile1);
     end
 end    
 
@@ -110,6 +135,10 @@ for f = 1:nfiles
     else
         kin1 = Kinematics(f);
     end
+    if (length(kin1.t) < 20)
+        warning('Very few frames (%d) digitized in file %s.  Skipping...',length(kin1.t),kinfiles{f});
+        continue;
+    end
     
     if (f > nprev) || isempty(IMU(f).t) || ...
             inputyn('Reload IMU data?','default',false)
@@ -126,7 +155,7 @@ for f = 1:nfiles
         imu1 = IMU(f);
     end
     
-    if ((f > nprev) || isempty(PIV(f).t) || ...
+    if ((f > nprev) || ~isfield(PIV(f),'t') || isempty(PIV(f).t) || ...
             inputyn('Reload PIV data?','default',false))
         piv1 = process_accel_piv_data(pivfiles{f}, kin1, ...
             'leftsidevortexsign',leftsidevortexsign);
@@ -203,10 +232,10 @@ for f = 1:nfiles
     
     out(f).vxcirc = repmat(piv1.vxcirc, [nchan 1]);
     out(f).vxcircstd = repmat(piv1.vxcircstd, [nchan 1]);
-    out(f).vxprevcirc = repmat(piv1.vxcirc, [nchan 1]);
-    out(f).vxprevcircstd = repmat(piv1.vxcircstd, [nchan 1]);
-    out(f).vxdist = repmat(piv1.vxcirc, [nchan 1]);
-    out(f).vxdiststd = repmat(piv1.vxcircstd, [nchan 1]);
+    out(f).vxprevcirc = repmat(piv1.vxprevcirc, [nchan 1]);
+    out(f).vxprevcircstd = repmat(piv1.vxprevcircstd, [nchan 1]);
+    out(f).vxdist = repmat(piv1.vxdist, [nchan 1]);
+    out(f).vxdiststd = repmat(piv1.vxdiststd, [nchan 1]);
 end
 
 putvar out;
