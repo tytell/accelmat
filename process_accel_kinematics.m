@@ -432,6 +432,8 @@ K.sidepeak = sidepeak;
 K.comspeedfwdmn = comspeedfwdmn / fishlenmm;
 K.comspeedfwdrms = comspeedfwdrms / fishlenmm;
 K.headdispfwdmn = headdispfwdmn / fishlenmm;
+K.swimvecx = swimvecx;
+K.swimvecy = swimvecy;
 K.amp = amp / fishlenmm;
 K.per = per;
 if ismidline

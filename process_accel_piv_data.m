@@ -25,6 +25,12 @@ indcirc = find(iscirc);
 indcirc = indcirc(:)';
 
 nframes = length(F.(names{indcirc(1)}));
+if nframes > length(kin.t)
+    warning('PIV data has more frames than kinematic data. Only analyzing overlapping frames.');
+    nframes = length(kin.t);
+elseif length(kin.t) > nframes+5
+    warning('Kinematics data has more frames than PIV data.  Only analyzing overlapping frames.');
+end
 
 circ0 = NaN(nframes,length(indcirc));
 
@@ -61,8 +67,13 @@ vxdist = NaN(size(ind));
 vxcircstd = NaN(size(ind));
 vxprevcircstd = NaN(size(ind));
 vxdiststd = NaN(size(ind));
+vxx = NaN(size(ind));
+vxy = NaN(size(ind));
+vxprevx = NaN(size(ind));
+vxprevy = NaN(size(ind));
+vxang = NaN(size(ind));
 
-ind(end+1:end+2) = size(circ0,1);
+ind(end+1:end+2) = nframes;
 for i = 1:length(ind)-2
     if tailside(i) == 'L'
         findsign = opt.leftsidevortexsign;
@@ -86,24 +97,44 @@ for i = 1:length(ind)-2
     vxcircstd(i) = nanstd(circ0(k,vx1));
     vxx1 = vxx0(k,vx1);
     vxy1 = vxy0(k,vx1);
+    vxx(i) = vxx1(1);
+    vxy(i) = vxy1(1);
     
-    vxprev1 = last((vxstart < ind(i)) & (vxsgn == -vxsgn(vx1)));
+    vxprev1 = last(all(isfinite(circ0(k,1:vx1-1))) & (vxsgn(1:vx1-1) == -vxsgn(vx1)));
     if ~isempty(vxprev1)
-        k = vxstart(vxprev1)+(0:opt.nframesmean-1);
-        k = k((k >= 1) & (k <= size(circ0,1)));
         vxprevcirc(i) = nanmean(circ0(k,vxprev1));
         vxprevcircstd(i) = nanstd(circ0(k,vxprev1));
 
         vxxprev1 = vxx0(k,vxprev1);
         vxyprev1 = vxy0(k,vxprev1);
+        vxprevx(i) = vxxprev1(1);
+        vxprevy(i) = vxyprev1(1);
         
         vxdist1 = sqrt((vxx1 - vxxprev1).^2 + (vxy1 - vxyprev1).^2);
         
         vxdist(i) = nanmean(vxdist1);
         vxdiststd(i) = nanstd(vxdist1);
+        
+        %previous vortex should always have > x than the current one,
+        %because it's further down in the wake
+        dx = vxxprev1 - vxx1;
+        dy = vxyprev1 - vxy1;
+        
+        %angle of the vortex pair to the opposite of the swimming direction
+        %(ie, backwards)
+        dax = -dx.*kin.swimvecx(k)' - dy.*kin.swimvecy(k)';
+        dlat = +dx.*kin.swimvecy(k)' - dy.*kin.swimvecx(k)';
+        
+        vxang1 = atan2(dlat,dax);
+        vxang(i) = angmean(vxang1);
     end
 end
 
+P.vxx = vxx;
+P.vxy = vxy;
+P.vxprevx = vxprevx;
+P.vxprevy = vxprevy;
+P.vxang = vxang;
 P.vxcirc = vxcirc;
 P.vxcircstd = vxcircstd;
 P.vxprevcirc = vxprevcirc;

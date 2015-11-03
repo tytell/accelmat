@@ -2,7 +2,7 @@ function process_bg38_accel_data
 
 accmethod = 'madgwick';
 smoothdur = 0.5;
-leftsidevortexsign = -1;
+leftsidevortexsign = 1;
 
 fishlen = 148;       % mm
 
@@ -140,6 +140,7 @@ for f = 1:nfiles
         continue;
     end
     
+    fprintf('*** %s\n', accfiles{f});
     if (f > nprev) || isempty(IMU(f).t) || ...
             inputyn('Reload IMU data?','default',false)
         timerange = [min(kin1.t) max(kin1.t)];
@@ -155,6 +156,7 @@ for f = 1:nfiles
         imu1 = IMU(f);
     end
     
+    fprintf('*** %s\n', pivfiles{f});
     if ((f > nprev) || ~isfield(PIV(f),'t') || isempty(PIV(f).t) || ...
             inputyn('Reload PIV data?','default',false))
         piv1 = process_accel_piv_data(pivfiles{f}, kin1, ...
@@ -230,6 +232,11 @@ for f = 1:nfiles
     out(f).yawang = repmat(acc.orient(3,:), [nchan 1]);
     out(f).yawstd = repmat(acc.orientstd(3,:), [nchan 1]);
     
+    out(f).vxx = repmat(piv1.vxx, [nchan 1]);
+    out(f).vxy = repmat(piv1.vxy, [nchan 1]);
+    out(f).vxprevx = repmat(piv1.vxprevx, [nchan 1]);
+    out(f).vxprevy = repmat(piv1.vxprevy, [nchan 1]);
+    out(f).vxang = repmat(piv1.vxang, [nchan 1]) * 180/pi;  % convert from rad to deg
     out(f).vxcirc = repmat(piv1.vxcirc, [nchan 1]);
     out(f).vxcircstd = repmat(piv1.vxcircstd, [nchan 1]);
     out(f).vxprevcirc = repmat(piv1.vxprevcirc, [nchan 1]);
