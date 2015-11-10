@@ -2,8 +2,11 @@ function P = process_accel_piv_data(filename, kin, varargin)
 
 opt.nframesmean = 5;
 opt.leftsidevortexsign = -1;
+opt.showdiagnostics = true;
 
 opt = parsevarargin(opt,varargin, 3);
+
+dt = kin.t(2) - kin.t(1);
 
 F = load(filename);
 
@@ -37,8 +40,14 @@ circ0 = NaN(nframes,length(indcirc));
 for i = 1:length(indcirc)
     j = indcirc(i);
     good = ~cellfun(@isempty, F.(names{j}));
-    circ0(good,num(j)) = cat(1,F.(names{j}){good});
+    
+    %make sure we only take up through nframes frames
+    good2 = good(1:nframes);
+    good(nframes+1:end) = false;
+    
+    circ0(good2,num(j)) = cat(1,F.(names{j}){good});
 end
+circ0(circ0 == 0) = NaN;
 
 indctr = find(ismember(var,{'ctr'}));
 vxx0 = NaN(nframes,length(indcirc));
@@ -48,20 +57,95 @@ for i = 1:length(indctr)
     j = indctr(i);
     good = ~cellfun(@isempty, F.(names{j}));
     
+    %make sure we only take up through nframes frames
+    good2 = good(1:nframes);
+    good(nframes+1:end) = false;
+
+    if all(~good)
+        continue;
+    end
+    
     xy = cat(1,F.(names{j}){good});
     
-    vxx0(good,num(j)) = xy(:,1);
-    vxy0(good,num(j)) = xy(:,2);
+    vxx0(good2,num(j)) = xy(:,1);
+    vxy0(good2,num(j)) = xy(:,2);
 end
+bad = (vxx0 == 0) & (vxy0 == 0);
+vxx0(bad) = NaN;
+vxy0(bad) = NaN;
+
+%get rid of any elements with no circulation values
+good = any(isfinite(circ0));
+circ0 = circ0(:,good);
+vxx0 = vxx0(:,good);
+vxy0 = vxy0(:,good);
+vxt0 = repmat(kin.t(:),[1 size(circ0,2)]);
+vxt0(isnan(circ0)) = NaN;
+if (size(vxt0,1) > size(circ0,1))
+    vxt0 = vxt0(1:size(circ0,1),:);
+end
+nvx = size(circ0,2);
 
 vxstart = first(isfinite(circ0));
 vxsgn = nanmedian(sign(circ0));
-circ0mn = nanmean(circ0);
 
 ind = kin.indpeak(end,:);
 tailside = kin.sidepeak(end,:);
+ind2 = cat(2,ind,nframes);
+
+iscircsignmatch = false(length(ind),nvx);
+circmean = zeros(length(ind),nvx);
+fracdef = zeros(length(ind),nvx);
+for i = 1:length(ind)
+    if tailside(i) == 'L'
+        findsign = opt.leftsidevortexsign;
+    else
+        findsign = -opt.leftsidevortexsign;
+    end  
+%     %look for matching sign of the circulation
+%     circsignmatch1 = sign(circ0(ind(i):ind(i+1),:)) == findsign;
+%     %call it a match if 90% of frames have the right circulation
+%     iscircsignmatch(i,:) = sum(circsignmatch1) > (0.9 * (ind(i+1)-ind(i)+1));
+    
+    circmean(i,:) = nanmean(circ0(ind2(i):ind2(i+1),:));
+    iscircsignmatch(i,:) = sign(circmean(i,:)) == findsign;
+    fracdef(i,:) = sum(isfinite(circ0(ind2(i):ind2(i+1),:))) ./ (ind2(i+1)-ind2(i)+1);
+end
+
+%match vortices to tailbeats by looking for the vortex that's present with
+%the right sign in the largest fraction of frames during each tailbeat,
+%making sure that we don't pick the same vortex twice.  Assumes that
+%vortices are matched in order (so that if vortex 5 is matched to tailbeat
+%4, vortex 6 couldn't match tailbeat 3)
+
+circmatch = fracdef .* double(iscircsignmatch);
+vxmatch = NaN(length(ind),1);
+a = 1;
+for i = 1:size(circmatch,1)
+    %first look for ones that are at least 80% in this cycle
+    k = find(circmatch(i,a:end) >= 0.8);
+    k = k + a-1;
+    if length(k) == 1
+        vxmatch1 = k;
+    elseif length(k) > 1
+        [~,vxmatch1] = max(abs(circmean(i,k)));
+        vxmatch1 = k(vxmatch1);
+    else
+        [v1,vxmatch1] = max(circmatch(i,a:end));
+        vxmatch1 = vxmatch1+a-1;
+        if v1 <= 0.5
+            vxmatch1 = [];
+        end
+    end
+    
+    if ~isempty(vxmatch1)
+        vxmatch(i) = vxmatch1;
+        a = vxmatch1+1;
+    end
+end
 
 vxcirc = NaN(size(ind));
+vxt = NaN(size(ind));
 vxprevcirc = NaN(size(ind));
 vxdist = NaN(size(ind));
 vxcircstd = NaN(size(ind));
@@ -72,35 +156,36 @@ vxy = NaN(size(ind));
 vxprevx = NaN(size(ind));
 vxprevy = NaN(size(ind));
 vxang = NaN(size(ind));
+vxind = NaN(size(ind));
 
-ind(end+1:end+2) = nframes;
-for i = 1:length(ind)-2
-    if tailside(i) == 'L'
-        findsign = opt.leftsidevortexsign;
-    else
-        findsign = -opt.leftsidevortexsign;
-    end  
-    
-    indvortex = find((vxstart >= ind(i)) & (vxstart < ind(i+2)) & ...
-        (vxsgn == findsign));
-    [~,vx1] = max(circ0mn(indvortex));
-    vx1 = indvortex(vx1);
-
-    if isempty(vx1) || ((i < length(ind)-1) && (vx1 >= ind(i+2)))
-        warning('No vortex found for tail beat %d\n',i);
-        continue;
+for i = 1:length(ind)
+    if ~isfinite(vxmatch(i))
+        warning('No vortex found for tail beat %d',i);
+        continue
     end
     
-    k = vxstart(vx1)+(0:opt.nframesmean-1);
+    vx1 = vxmatch(i);
+    
+    %start at the beginning of the vortex
+    k1 = vxstart(vx1);
+    if (k1 < ind(i))
+        %unless the beginning of the vortex is before the beginning of this
+        %tail beat
+        k1 = ind(i);
+    end
+    
+    k = k1+(0:opt.nframesmean-1);
     k = k((k >= 1) & (k <= size(circ0,1)));
+    
     vxcirc(i) = nanmean(circ0(k,vx1));
+    vxt(i) = nanmean(vxt0(k,vx1));
     vxcircstd(i) = nanstd(circ0(k,vx1));
     vxx1 = vxx0(k,vx1);
     vxy1 = vxy0(k,vx1);
     vxx(i) = vxx1(1);
     vxy(i) = vxy1(1);
     
-    vxprev1 = last(all(isfinite(circ0(k,1:vx1-1))) & (vxsgn(1:vx1-1) == -vxsgn(vx1)));
+    vxprev1 = last(all(isfinite(circ0(k,1:vx1-1))) & ~iscircsignmatch(i,1:vx1-1));
     if ~isempty(vxprev1)
         vxprevcirc(i) = nanmean(circ0(k,vxprev1));
         vxprevcircstd(i) = nanstd(circ0(k,vxprev1));
@@ -127,6 +212,30 @@ for i = 1:length(ind)-2
         
         vxang1 = atan2(dlat,dax);
         vxang(i) = angmean(vxang1);
+    end
+end
+
+if opt.showdiagnostics
+    tailpos = kin.exc(end,:);
+    tailpos = (tailpos - nanmean(tailpos)) ./ range(tailpos);
+    
+    good = isfinite(kin.indpeak(end,:));
+    tailpeak = tailpos(kin.indpeak(end,good));
+    tpeak = kin.tpeak(end,good);
+    
+    circs = circ0 ./ range(circ0(:));
+    vxcircs = vxcirc ./ range(circ0(:));
+    
+    plot(kin.t, tailpos,'r-', tpeak,tailpeak,'ro');
+    addplot(vxt0, circs, 'k-');
+    
+    addplot(cat(1,tpeak,vxt), cat(1,tailpeak,vxcircs), 'b*-');
+    
+    notmatched = isnan(vxt);
+    addplot(tpeak(notmatched), tailpeak(notmatched), 'gs');
+    drawnow;
+    if ~inputyn('Continue?','default',true)
+        error('Aborted...');
     end
 end
 

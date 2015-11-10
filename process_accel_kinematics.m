@@ -6,6 +6,7 @@ opt.massperlen = ones(10,1);
 opt.smoothdur = 0.5;
 opt.fishlen = [];
 opt.sampfreq = [];
+opt.tstart = [];
 
 opt = parsevarargin(opt,varargin, 2);
 
@@ -28,8 +29,10 @@ end
 
 good = isfinite(txmm) & isfinite(tymm);
 
-t0 = t(end);
-t = t(good) - t0;
+if isempty(opt.tstart)
+    opt.tstart = -t(end);
+end
+t = t(good) + opt.tstart;
 
 if ismidline
     exs = exs(:,good);
