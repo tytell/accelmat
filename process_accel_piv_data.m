@@ -3,10 +3,17 @@ function P = process_accel_piv_data(filename, kin, varargin)
 opt.nframesmean = 5;
 opt.leftsidevortexsign = -1;
 opt.showdiagnostics = true;
+opt.sampfreq = [];      % if empty, use the same as the kinematics data
+opt.frameskip = 1;
+opt.tend = 0;           % last time in the video. Usually <0 if a post trigger was used
 
 opt = parsevarargin(opt,varargin, 3);
 
-dt = kin.t(2) - kin.t(1);
+if isempty(opt.sampfreq)
+    dt = kin.t(2) - kin.t(1);
+else
+    dt = 1/opt.sampfreq;
+end
 
 F = load(filename);
 
@@ -28,22 +35,42 @@ indcirc = find(iscirc);
 indcirc = indcirc(:)';
 
 nframes = length(F.(names{indcirc(1)}));
-if nframes > length(kin.t)
-    warning('PIV data has more frames than kinematic data. Only analyzing overlapping frames.');
+dur = nframes * dt;
+
+frameskip = opt.frameskip;
+fr = (0:nframes-1)*frameskip + 1;
+t = fr*dt;
+t = t - t(end) + opt.tend;
+
+if range(t) > 1.05*range(kin.t)
+    warning('PIV data is longer than kinematic data. Only analyzing overlapping times.');
     nframes = length(kin.t);
-elseif length(kin.t) > nframes+5
-    warning('Kinematics data has more frames than PIV data.  Only analyzing overlapping frames.');
+elseif range(kin.t) > 1.05*range(t)
+%     fprintf('Kinematics time range = [%f %f]; PIV time range = [%f %f]\n', ...
+%         kin.t(1), kin.t(end), 
+    warning('Kinematics data is longer than PIV data.  Only analyzing overlapping times.');
+    frameskip = round(length(kin.t) / nframes);
+    
+    fprintf('PIV Frameskip seems to be %d.\n', frameskip);
+    fs1 = input(sprintf('What is the correct frameskip (default = %d)? ', frameskip));
+    if ~isempty(fs1) && (fs1 >= 1)
+        frameskip = fs1;
+    end
 end
+
+span = (t >= kin.t(1)) & (t <= kin.t(end));
+trange = [first(t, span), last(t, span)];
+nframes = sum(span);
+fr = fr(span);
 
 circ0 = NaN(nframes,length(indcirc));
 
 for i = 1:length(indcirc)
     j = indcirc(i);
-    good = ~cellfun(@isempty, F.(names{j}));
+    good = ~cellfun(@isempty, F.(names{j})) & span;
     
-    %make sure we only take up through nframes frames
-    good2 = good(1:nframes);
-    good(nframes+1:end) = false;
+    %make sure we only take overlapping times
+    good2 = good(span);
     
     circ0(good2,num(j)) = cat(1,F.(names{j}){good});
 end
@@ -55,11 +82,10 @@ vxy0 = NaN(nframes,length(indcirc));
 
 for i = 1:length(indctr)
     j = indctr(i);
-    good = ~cellfun(@isempty, F.(names{j}));
+    good = ~cellfun(@isempty, F.(names{j})) & span;
     
     %make sure we only take up through nframes frames
-    good2 = good(1:nframes);
-    good(nframes+1:end) = false;
+    good2 = good(span);
 
     if all(~good)
         continue;
@@ -79,17 +105,50 @@ good = any(isfinite(circ0));
 circ0 = circ0(:,good);
 vxx0 = vxx0(:,good);
 vxy0 = vxy0(:,good);
-vxt0 = repmat(kin.t(:),[1 size(circ0,2)]);
+nvx = size(circ0,2);
+
+%now match sampling frequencies
+if opt.sampfreq / frameskip > 1/(kin.t(2) - kin.t(1))
+    %upsample the kinematics data
+    tpeak = NaN(size(kin.indpeak));
+    good = isfinite(kin.indpeak);
+    tpeak(good) = kin.t(kin.indpeak(good));
+    
+    indpeak = round((tpeak - t(1)) * opt.sampfreq)+1;
+    
+    swimvecx = NaN(size(t));
+    swimvecy = NaN(size(t));
+    good = isfinite(kin.swimvecx);
+    swimvecx(span) = interp1(kin.t(good),kin.swimvecx(good), t(span));
+    swimvecy(span) = interp1(kin.t(good),kin.swimvecy(good), t(span));   
+else
+    indpeak = kin.indpeak;
+    swimvecx = kin.swimvecx;
+    swimvecy = kin.swimvecy;
+end
+    
+circ1 = NaN(max(fr), nvx);
+circ1(fr,:) = circ0;
+vxx1 = NaN(max(fr), nvx);
+vxx1(fr,:) = vxx0;
+vxy1 = NaN(max(fr), nvx);
+vxy1(fr,:) = vxy0;
+
+circ0 = circ1;
+vxx0 = vxx1;
+vxy0 = vxy1;
+
+vxt0 = repmat(t(:),[1 size(circ0,2)]);
 vxt0(isnan(circ0)) = NaN;
 if (size(vxt0,1) > size(circ0,1))
     vxt0 = vxt0(1:size(circ0,1),:);
 end
-nvx = size(circ0,2);
 
 vxstart = first(isfinite(circ0));
 vxsgn = nanmedian(sign(circ0));
 
-ind = kin.indpeak(end,:);
+ind = indpeak(end,:);
+
 tailside = kin.sidepeak(end,:);
 ind2 = cat(2,ind,nframes);
 
@@ -97,6 +156,12 @@ iscircsignmatch = false(length(ind),nvx);
 circmean = zeros(length(ind),nvx);
 fracdef = zeros(length(ind),nvx);
 for i = 1:length(ind)
+    if (ind2(i) < 1) || (ind2(i+1) < 1) || ...
+            (ind2(i) > length(t)) || (ind2(i+1) > length(t))
+        warning('Kinematics tail beat %i is out of the PIV time range. Skipping', i);
+        continue;
+    end
+    
     if tailside(i) == 'L'
         findsign = opt.leftsidevortexsign;
     else
@@ -123,7 +188,7 @@ vxmatch = NaN(length(ind),1);
 a = 1;
 for i = 1:size(circmatch,1)
     %first look for ones that are at least 80% in this cycle
-    k = find(circmatch(i,a:end) >= 0.8);
+    k = find(circmatch(i,a:end) >= 0.8/frameskip);
     k = k + a-1;
     if length(k) == 1
         vxmatch1 = k;
@@ -174,7 +239,7 @@ for i = 1:length(ind)
         k1 = ind(i);
     end
     
-    k = k1+(0:opt.nframesmean-1);
+    k = k1+(0:(opt.nframesmean-1)*frameskip);
     k = k((k >= 1) & (k <= size(circ0,1)));
     
     vxcirc(i) = nanmean(circ0(k,vx1));
@@ -185,7 +250,8 @@ for i = 1:length(ind)
     vxx(i) = vxx1(1);
     vxy(i) = vxy1(1);
     
-    vxprev1 = last(all(isfinite(circ0(k,1:vx1-1))) & ~iscircsignmatch(i,1:vx1-1));
+    vxprev1 = last((sum(isfinite(circ0(k,1:vx1-1))) >= (length(k)-2)/frameskip) & ...
+        ~iscircsignmatch(i,1:vx1-1));
     if ~isempty(vxprev1)
         vxprevcirc(i) = nanmean(circ0(k,vxprev1));
         vxprevcircstd(i) = nanstd(circ0(k,vxprev1));
@@ -207,8 +273,8 @@ for i = 1:length(ind)
         
         %angle of the vortex pair to the opposite of the swimming direction
         %(ie, backwards)
-        dax = -dx.*kin.swimvecx(k)' - dy.*kin.swimvecy(k)';
-        dlat = +dx.*kin.swimvecy(k)' - dy.*kin.swimvecx(k)';
+        dax = -dx.*swimvecx(k)' - dy.*swimvecy(k)';
+        dlat = +dx.*swimvecy(k)' - dy.*swimvecx(k)';
         
         vxang1 = atan2(dlat,dax);
         vxang(i) = angmean(vxang1);
@@ -227,7 +293,9 @@ if opt.showdiagnostics
     vxcircs = vxcirc ./ range(circ0(:));
     
     plot(kin.t, tailpos,'r-', tpeak,tailpeak,'ro');
-    addplot(vxt0, circs, 'k-');
+    
+    goodcirc = any(isfinite(circs),2);
+    addplot(vxt0(goodcirc,:), circs(goodcirc,:), 'k-');
     
     addplot(cat(1,tpeak,vxt), cat(1,tailpeak,vxcircs), 'b*-');
     

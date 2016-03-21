@@ -21,10 +21,12 @@ if exist('exs','var') && ~isempty(exs) && any(~isnan(exs))
 else
     ismidline = false;
 end
-if ~exist('fishlenmm','var') && ~isempty(opt.fishlen)
-    fishlenmm = opt.fishlen;
-else
-    error('No fish length!');
+if ~exist('fishlenmm','var')
+    if ~isempty(opt.fishlen)
+        fishlenmm = opt.fishlen;
+    else
+        error('No fish length!');
+    end
 end
 
 good = isfinite(txmm) & isfinite(tymm);
@@ -66,7 +68,7 @@ if ismidline
     htdist = (exs - repmat(hxs,[nextra 1])) .* repmat(htx,[nextra 1]) + ...
         (eys - repmat(hys,[nextra 1])) .* repmat(hty,[nextra 1]);
 
-    [~,ord] = sort(htdist);
+    [~,ord] = sort(htdist, 1);
     good = all(isfinite(htdist));
     k = first(good);
     if all(all(ord(:,good) == repmat(ord(:,k),[1 sum(good)])))
@@ -178,7 +180,7 @@ end
 
 exc = -excx.*repmat(swimvecy,[size(excx,1) 1]) + excy.*repmat(swimvecx,[size(excx,1) 1]);
 
-if ismidline 
+if ismidline && (npts >= 5)
     pkind = cell(1,2);
     pkamp = cell(1,2);
     pksite = cell(1,2);
@@ -439,7 +441,7 @@ K.swimvecx = swimvecx;
 K.swimvecy = swimvecy;
 K.amp = amp / fishlenmm;
 K.per = per;
-if ismidline
+if ismidline && (npts >= 5)
     K.curve = curve * fishlenmm;
     K.indcurvepeak = indcurvepeak;
     K.tcurvepeak = tcurvepeak;
