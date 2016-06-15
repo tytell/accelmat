@@ -74,6 +74,8 @@ for f = 1:length(accfiles)
     pivfiles{f} = fullfile(basepivdir,pivfiles{f});
 end
 
+partnum = zeros(size(kinfiles));
+trialnum = zeros(size(kinfiles));
 for f = 1:length(accfiles)
     if ~exist(accfiles{f},'file')
         warning('File %s not found.  Trial will be skipped.\n', accfiles{f});
@@ -89,7 +91,7 @@ for f = 1:length(accfiles)
     [~,kinfile1,~] = fileparts(kinfiles{f});
     [~,pivfile1,~] = fileparts(pivfiles{f});
     acctok = regexp(accfile1, '[Bb]g(\d+)[ _](\d+)([a-z]?)$', 'tokens','once');
-    kintok = regexp(kinfile1, '[Bb]g(\d+) [\d_]+Hz (\d+)([a-z]?)( Part \d+)?$', 'tokens','once');
+    kintok = regexp(kinfile1, '[Bb]g(\d+) [\d_]+Hz (\d+)([a-z]?)( Part (\d+))?$', 'tokens','once');
     pivtok = regexp(pivfile1, '[Bb]g(\d+) [\d_]+Hz (\d+)([a-z]?) vortex$', 'tokens','once');
     
     if isempty(acctok)
@@ -107,7 +109,36 @@ for f = 1:length(accfiles)
         (str2double(acctok{2}) ~= str2double(pivtok{2}))
         error('Trial numbers do not match: %s %s %s\n', accfile1, kinfile1, pivfile1);
     end
+    
+    trialnum(f) = str2double(kintok{2});
+    if ~isempty(kintok{4})
+        partnum1 = regexp(kintok{4}, 'Part (\d+)', 'tokens','once');
+        partnum(f) = str2double(partnum1{1});
+    end
 end    
+
+numkinframes = zeros(size(kinfiles));
+dur = zeros(length(kinfiles),1);
+for f = 1:length(kinfiles)
+    load(kinfiles{f}, 't');
+    numkinframes(f) = length(t);
+    dur(f) = t(end);
+end
+
+tstart = zeros(size(kinfiles));
+uniqtrials = unique(trialnum);
+for i = 1:length(uniqtrials)
+    k = find(trialnum == uniqtrials(i));
+    if length(k) == 1
+        tstart(k) = -dur(k);
+    else
+        tstart1 = 0;
+        for j = length(k):-1:1
+            tstart(k(j)) = tstart1 - dur(k(j));
+            tstart1 = tstart1 - dur(k(j));
+        end
+    end
+end
 
 nfiles = length(accfiles);
 
@@ -140,7 +171,7 @@ for f = 1:nfiles
     if ((f > nprev) || isempty(Kinematics(f).t) || ...
             inputyn('Reload kinematics data?','default',false))
         kin1 = process_accel_kinematics(kinfiles{f},'massperlen',massperlen, ...
-            'smoothdur',smoothdur, 'fishlen',fishlen);
+            'smoothdur',smoothdur, 'fishlen',fishlen, 'tstart',tstart(f));
     else
         kin1 = Kinematics(f);
     end
@@ -241,6 +272,11 @@ for f = 1:nfiles
     out(f).yawang = repmat(acc.orient(3,:), [nchan 1]);
     out(f).yawstd = repmat(acc.orientstd(3,:), [nchan 1]);
     
+    out(f).vxx = repmat(piv1.vxx, [nchan 1]);
+    out(f).vxy = repmat(piv1.vxy, [nchan 1]);
+    out(f).vxprevx = repmat(piv1.vxprevx, [nchan 1]);
+    out(f).vxprevy = repmat(piv1.vxprevy, [nchan 1]);
+    out(f).vxang = repmat(piv1.vxang, [nchan 1]) * 180/pi;  % convert from rad to deg
     out(f).vxcirc = repmat(piv1.vxcirc, [nchan 1]);
     out(f).vxcircstd = repmat(piv1.vxcircstd, [nchan 1]);
     out(f).vxprevcirc = repmat(piv1.vxprevcirc, [nchan 1]);

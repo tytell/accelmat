@@ -6,6 +6,7 @@ opt.massperlen = ones(10,1);
 opt.smoothdur = 0.5;
 opt.fishlen = [];
 opt.sampfreq = [];
+opt.tstart = [];
 
 opt = parsevarargin(opt,varargin, 2);
 
@@ -30,8 +31,10 @@ end
 
 good = isfinite(txmm) & isfinite(tymm);
 
-t0 = t(end);
-t = t(good) - t0;
+if isempty(opt.tstart)
+    opt.tstart = -t(end);
+end
+t = t(good) + opt.tstart;
 
 if ismidline
     exs = exs(:,good);
@@ -65,7 +68,7 @@ if ismidline
     htdist = (exs - repmat(hxs,[nextra 1])) .* repmat(htx,[nextra 1]) + ...
         (eys - repmat(hys,[nextra 1])) .* repmat(hty,[nextra 1]);
 
-    [~,ord] = sort(htdist);
+    [~,ord] = sort(htdist, 1);
     good = all(isfinite(htdist));
     k = first(good);
     if all(all(ord(:,good) == repmat(ord(:,k),[1 sum(good)])))
@@ -177,7 +180,7 @@ end
 
 exc = -excx.*repmat(swimvecy,[size(excx,1) 1]) + excy.*repmat(swimvecx,[size(excx,1) 1]);
 
-if ismidline 
+if ismidline && (npts >= 5)
     pkind = cell(1,2);
     pkamp = cell(1,2);
     pksite = cell(1,2);
@@ -434,9 +437,11 @@ K.sidepeak = sidepeak;
 K.comspeedfwdmn = comspeedfwdmn / fishlenmm;
 K.comspeedfwdrms = comspeedfwdrms / fishlenmm;
 K.headdispfwdmn = headdispfwdmn / fishlenmm;
+K.swimvecx = swimvecx;
+K.swimvecy = swimvecy;
 K.amp = amp / fishlenmm;
 K.per = per;
-if ismidline
+if ismidline && (npts >= 5)
     K.curve = curve * fishlenmm;
     K.indcurvepeak = indcurvepeak;
     K.tcurvepeak = tcurvepeak;
