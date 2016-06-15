@@ -1,61 +1,59 @@
-function process_bg38_accel_data
+function process_bg36_accel_data
 
 accmethod = 'madgwick';
 smoothdur = 0.5;
 leftsidevortexsign = 1;
 
-fishlen = 148;       % mm
+fishlen = 161;       % mm
 
 sampfreq = 100;
 
-imuposition = [7.2 7.1 -15.0];        % x y z coords in mm
+imuposition = [0.5 10.7 -16.6];        % x y z coords in mm
 
 steadythresh = 0.03;    
 
-acccalibfile = 'F:\Accelerometer h5\accelerometer bg38/calib001.h5'; %'F:\Accelerometer h5\accelerometer bg38/calib001.h5'; %fill in here
+acccalibfile = 'F:\Accelerometer h5\accelerometer bg25/calib001.h5'; %'F:\Accelerometer h5\accelerometer bg38/calib001.h5'; %fill in here
 massdistfile = 'C:\Code\accelmat\fishmass.mat'; % or 'C:\Code\accelmat\fishmass.mat';
-noisefile = 'F:\Accelerometer h5\accelerometer bg38/bg38 10min test 001.h5'; % or 'F:\Accelerometer h5\accelerometer bg38/bg38 10min test 001.h5';
+noisefile = 'F:\Accelerometer h5\accelerometer bg25/bg25 and 36 10 min test 001.h5'; % or 'F:\Accelerometer h5\accelerometer bg38/bg38 10min test 001.h5';
 
-baseaccdir = 'F:\Accelerometer h5\accelerometer bg38';    % or 'F:\Accelerometer h5\accelerometer bg38'
-basekindir = 'F:\Digitize Fish\digitize fish bg38';    % or 'F:\Digitize Fish\digitize fish bg38'
-basepivdir = 'F:\Analyze PIV\analyzepiv bg38';    % or 'F:\Digitize Fish\digitize fish bg38'
+baseaccdir = 'F:\Accelerometer h5\accelerometer bg25';    % or 'F:\Accelerometer h5\accelerometer bg38'
+basekindir = 'F:\Digitize Fish\digitize fish bg25';    % or 'F:\Digitize Fish\digitize fish bg38'
+basepivdir = 'F:\Analyze PIV\analyzepiv bg25';    % or 'F:\Digitize Fish\digitize fish bg38'
 
 accfiles = {
-    'Bg38_008.h5'
-    'Bg38_009.h5'
-    'Bg38_010.h5'
-    'Bg38_011.h5'
-    'Bg38_012.h5'
-    'Bg38_013.h5'
-    'Bg38_014.h5'
-    'Bg38_015.h5'
-    'Bg38_016.h5'
+
+    'Bg25_027.h5'
+    'Bg25_028.h5'
+    'Bg25_029.h5'
+    'Bg25_030.h5'
+    'Bg25_031.h5'
+    'Bg25_032.h5'
+    'Bg25_033.h5'
+    'Bg25_034.h5'
     };
 kinfiles = { 
-    'bg38 16_5Hz 008.mat'
-    'bg38 16_5Hz 009.mat'
-    'bg38 16_5Hz 010.mat'
-    'bg38 16_5Hz 011.mat'
-    'bg38 16_5Hz 012.mat'
-    'bg38 16_5Hz 013.mat'
-    'bg38 16_5Hz 014.mat'
-    'bg38 16_5Hz 015.mat'
-    'bg38 16_5Hz 016.mat'
+    'bg25 28_7Hz 027.mat'
+    'bg25 28_7Hz 028.mat'
+    'bg25 28_7Hz 029.mat'  
+    'bg25 28_7Hz 030.mat'
+    'bg25 28_7Hz 031.mat'
+    'bg25 28_7Hz 032.mat'
+    'bg25 28_7Hz 033.mat'
+    'bg25 28_7Hz 034.mat'
     };
 pivfiles = { 
-    'bg38 16_5Hz 008 vortex.mat'
-    'bg38 16_5Hz 009 vortex.mat'
-    'bg38 16_5Hz 010 vortex.mat'
-    'bg38 16_5Hz 011 vortex.mat'
-    'bg38 16_5Hz 012 vortex.mat'
-    'bg38 16_5Hz 013 vortex.mat'
-    'bg38 16_5Hz 014 vortex.mat'
-    'bg38 16_5Hz 015 vortex.mat'
-    'bg38 16_5Hz 016 vortex.mat'
+    'bg25 28_7Hz 027 vortex.mat'
+    'bg25 28_7Hz 028 vortex.mat'
+    'bg25 28_7Hz 029 vortex.mat'
+    'bg25 28_7Hz 030 vortex.mat'
+    'bg25 28_7Hz 031 vortex.mat'
+    'bg25 28_7Hz 032 vortex.mat'
+    'bg25 28_7Hz 033 vortex.mat'
+    'bg25 28_7Hz 034 vortex.mat'
     };
 
-outfile = 'F:\Data\bg38 data/Bg38 1_5BLs.csv'; % or 'F:\Data\Bg38 data/bg38 2BLs test.csv';
-outmatfile = 'F:\Data\bg38 data/Bg38 1_5BLs.mat'; % or 'F:\Data\Bg38 data/bg38 2BLs test.mat';
+outfile = 'F:\Data\bg36 data/bg25 2_5BLs.csv'; % or 'F:\Data\Bg38 data/bg38 2BLs test.csv';
+outmatfile = 'F:\Data\bg36 data/bg25 2_5BLs.mat'; % or 'F:\Data\Bg38 data/bg38 2BLs test.mat';
 
 %get the noise and bias characteristics for the gyro
 noise      = load_imu(noisefile);

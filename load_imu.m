@@ -100,6 +100,7 @@ if opt.calib
         fig = figure;
         mb = msgbox('Click three zero times','Click','help','non-modal');
         plot(t,acc);
+        legend('x','y','z');
         vertplot(t(iszero),'k--');
         
         [tzero,~] = ginputb(3);

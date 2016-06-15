@@ -20,10 +20,12 @@ if exist('exs','var') && ~isempty(exs) && any(~isnan(exs))
 else
     ismidline = false;
 end
-if ~exist('fishlenmm','var') && ~isempty(opt.fishlen)
-    fishlenmm = opt.fishlen;
-else
-    error('No fish length!');
+if ~exist('fishlenmm','var')
+    if ~isempty(opt.fishlen)
+        fishlenmm = opt.fishlen;
+    else
+        error('No fish length!');
+    end
 end
 
 good = isfinite(txmm) & isfinite(tymm);
