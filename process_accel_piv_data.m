@@ -33,6 +33,9 @@ iscirc(ismatch) = cellfun(@(x) isempty(x{2}), tok(ismatch));
 
 indcirc = find(iscirc);
 indcirc = indcirc(:)';
+if isempty(indcirc)
+    error('Tyler - this is a weird file.  Do something!');
+end
 
 nframes = length(F.(names{indcirc(1)}));
 dur = nframes * dt;
@@ -253,9 +256,15 @@ for i = 1:length(ind)
     vxprev1 = last((sum(isfinite(circ0(k,1:vx1-1))) >= (length(k)-2)/frameskip) & ...
         ~iscircsignmatch(i,1:vx1-1));
     if ~isempty(vxprev1)
+        k = vxstart(vxprev1)+(0:opt.nframesmean-1);
+        k = k((k >= 1) & (k <= size(circ0,1)));
+
         vxprevcirc(i) = nanmean(circ0(k,vxprev1));
         vxprevcircstd(i) = nanstd(circ0(k,vxprev1));
 
+        if length(k) > length(vxx1)
+            k = k(1:length(vxx1));
+        end
         vxxprev1 = vxx0(k,vxprev1);
         vxyprev1 = vxy0(k,vxprev1);
         vxprevx(i) = vxxprev1(1);

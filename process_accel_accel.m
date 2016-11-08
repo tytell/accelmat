@@ -29,6 +29,7 @@ tailphase2(span2) = interp1(kin.t(span1),tailphase1(span1), imu.t(span2));
 tpeak = kin.tpeak(end,:);
 imudt = imu.t(2) - imu.t(1);
 ind2 = round((tpeak - imu.t(1)) / imudt) + 1;
+ind2(ind2 > length(imu.t)) = length(imu.t);
 
 accs = NaN(size(imu.accdyn));
 for i = 1:3
