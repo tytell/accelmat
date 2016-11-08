@@ -222,3 +222,5 @@ rawdata
 testanalysis
 *.asv
 AccelSTIRFinalReport
+.idea
+.ipynb_checkpoints
