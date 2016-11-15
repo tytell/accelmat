@@ -216,8 +216,8 @@ class IMU(object):
             Pkm1 = Pk
             xkm1 = xk
 
-        self.orient = np.array(eulerEKF)
-        self.accdyn = np.array(aD)
+        self.orient = np.pad(np.array(eulerEKF), ((1, 0), (0, 0)), mode='edge')
+        self.accdyn = np.pad(np.array(aD), ((1, 0), (0, 0)), mode='edge')
 
     def _system_dynamics(self, xk, omegak, dt, Ca):
         phi, theta, psi = xk[:3]
@@ -394,6 +394,7 @@ class IMU(object):
         self.qorient = qorient
         self.orient = quaternion.as_euler_angles(qorient)
         self.gvec = gvec
+        self.accdyn = self.acc - gvec
 
     def orientation_from_accel(self, acc):
         """Get a quaternion orientation from an accelerometer reading, assuming that the accelerometer correctly
