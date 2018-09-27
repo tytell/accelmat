@@ -1,4 +1,7 @@
 function imu = get_orient_imu(imu, varargin)
+% Returns IMU sturcture
+% imu.accdyn units are g
+% imu.orient units are deg
 
 opt.method = 'madgwick';        % or 'simple' or 'ertss'
 opt.gyrooffset = [-16 -8];

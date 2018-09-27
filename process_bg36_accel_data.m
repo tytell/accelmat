@@ -224,7 +224,8 @@ for f = 1:nfiles
     out(f).tailamp = repmat(kin1.amp(end,:),[nchan 1]);
     out(f).freq = repmat(1./kin1.per, [nchan 1]);
     
-    out(f).accfwdpk = repmat(acc.fwdpk, [nchan 1]);
+    % all acc values in gs
+    out(f).accfwdpk = repmat(acc.fwdpk, [nchan 1]);        
     out(f).accfwdmn = repmat(acc.mean(1,:), [nchan 1]);
     out(f).accfwdiqr = repmat(acc.iqr(1,:), [nchan 1]);
     out(f).accsidemn = repmat(acc.mean(2,:), [nchan 1]);

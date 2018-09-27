@@ -3,6 +3,7 @@ from scipy import interpolate, signal
 import quaternion
 import h5py
 from copy import copy
+import re
 
 import matplotlib.pyplot as plt
 
@@ -119,15 +120,52 @@ class IMU(object):
                 self.gyro[:, i] = np.convolve(self.gyro0[:, i], np.ones((nsamp,))/nsamp, mode='same')
                 self.accel[:, i] = np.convolve(self.acc0[:, i], np.ones((nsamp,))/nsamp, mode='same')
 
-    def get_orientation(self, method='madgwick', initwindow=0.5, beta=2.86, Ca=(200.0, 100.0, 40.0)):
+    def get_orientation(self, method='madgwick', initwindow=0.5, beta=2.86, lCa=(0.0, -0.3, -0.7), Ca=None):
         if method.lower() == 'ekf':
-            self._get_orientation_ekf(Ca=np.array(Ca))
-        elif method.lower() == 'madgwick':
-            self._get_orientation_madgwick(initwindow=initwindow, beta=beta)
-        elif method.lower() == 'integrate_gyro':
-            self._get_orientation_madgwick(initwindow=initwindow, beta=0)
+            dt = np.mean(np.diff(self.t))
+            if Ca is None:
+                Ca = np.power(10, np.array(lCa)) / dt
+            else:
+                Ca = np.array(Ca) / dt
+            self._get_orientation_ekf(Ca=Ca)
 
-        return self.orient
+            inertialbasis = []
+
+            for rpy in self.orient_sensor:
+                QT = self._getQT(rpy)
+
+                inertialbasis.append(QT.dot(np.eye(3)))
+
+            inertialbasis = np.array(inertialbasis)
+
+            self.worldbasis = np.matmul(self.chip2world_rot, inertialbasis)
+
+            self.accdyn_world = np.matmul(self.chip2world_rot, self.accdyn_sensor.T).T
+            self.accdyn = self.accdyn_world
+
+        elif method.lower() in ['madgwick', 'integrate_gyro']:
+            if method.lower() == 'integrate_gyro':
+                beta = 0.0
+
+            self._get_orientation_madgwick(initwindow=initwindow, beta=beta)
+
+            qorient_world = self.qchip2world.conj() * self.qorient * self.qchip2world
+            self.qorient_world = qorient_world
+
+            self.orient_world = np.array([quaternion.as_euler_angles(q1) for q1 in qorient_world])
+            self.orient = self.orient_world
+
+            # make accdyn into a quaternion with zero real part
+            qacc = np.zeros((self.accdyn_sensor.shape[0], 4))
+            qacc[:, 1:] = self.accdyn_sensor
+
+            # rotate accdyn into the world coordinate system
+            qaccdyn_world = self.qchip2world.conj() * quaternion.as_quat_array(qacc) * self.qchip2world
+            self.accdyn_world = np.array([q.components[1:] for q in qaccdyn_world])
+            self.accdyn = self.accdyn_world
+
+
+        return self.orient_world
 
     def calibrate(self, filename):
         with h5py.File(filename, 'r') as h5calib:
@@ -146,12 +184,77 @@ class IMU(object):
             # bias noise covariance (assuming low drift)
             self.Qbias = 1e-10 * self.Qacc
 
-    def get_inertial_coords(self, filename, method='mean accel'):
+    def get_inertial_coords(self, filename, method='mean accel', g=None):
         with h5py.File(filename, 'r') as h5inertial:
             accel = 9.81 * np.array(h5inertial['/data/Accel'])
 
-            if method == 'mean accel':
+            if g is not None:
+                self.gN = g
+            elif method == 'mean accel':
                 self.gN = np.mean(accel, axis=0)
+
+    def get_world_coordinates(self, filename, axes=['z'], times=None, averagedur=0.1):
+        axinddict = {'x': 0, 'y': 1, 'z': 2}
+
+        with h5py.File(filename, 'r') as h5calib:
+            acc = np.array(h5calib['/data/Accel'])
+            t = np.array(h5calib['/data/t'])
+
+        gax = np.eye(3)
+
+        if len(axes) == 1:
+            times = [0]
+            averagedur = 4*t[-1]
+
+        d2 = averagedur/2
+
+        axord = []
+        for axis1, time1 in zip(axes, times):
+            ist = np.logical_and(t >= time1-d2, t <= time1+d2)
+            ax = np.mean(acc[ist, :], axis=0)
+
+            m = re.match('([+-]?)([XYZxyz])', axis1)
+            if m is None:
+                raise ValueError('Unrecognized axis specification axis')
+
+            if m.group(1) == '-':
+                axsign = -1.0
+            else:
+                axsign = 1.0
+
+            axind = axinddict[m.group(2).lower()]
+
+            gax[:, axind] = ax * axsign
+            axord.append(axind)
+
+        axord = np.concatenate((axord, np.setdiff1d(range(3), axord)))
+        axrevord = np.argsort(np.arange(3)[axord])
+
+        basis = self._gramschmidt(gax[:, axord])
+        basis = basis[:, axrevord]
+
+        # check for right handed-ness
+        # the Z axis should be equal to the cross product of the X and Y axes
+        # because of small numerical issues, it's sometimes not exactly equal,
+        # so we check that they're in the same direction
+        assert(np.dot(np.cross(basis[:, 0], basis[:, 1]), basis[:, 2]) > 0.9)
+
+        self.chip2world_rot = basis
+        self.qchip2world = quaternion.from_rotation_matrix(basis)
+        self.qworld2chip = quaternion.from_rotation_matrix(basis.T)
+
+    def _gramschmidt(self, U):
+        k = U.shape[1]
+        V = copy(U)
+
+        for i in range(k):
+            V[:, i] /= np.linalg.norm(V[:, i])
+
+            for j in range(i+1, k):
+                proj = np.dot(V[:, i], V[:, j]) * V[:, i]
+                V[:, j] -= proj
+
+        return V
 
     def _get_orientation_ekf(self, Ca):
         """Extended Kalman filter for sensor fusion
@@ -216,8 +319,13 @@ class IMU(object):
             Pkm1 = Pk
             xkm1 = xk
 
-        self.orient = np.pad(np.array(eulerEKF), ((1, 0), (0, 0)), mode='edge')
-        self.accdyn = np.pad(np.array(aD), ((1, 0), (0, 0)), mode='edge')
+        self.orient_sensor = np.pad(np.array(eulerEKF), ((1, 0), (0, 0)), mode='edge')
+        self.accdyn_sensor = np.pad(np.array(aD), ((1, 0), (0, 0)), mode='edge')
+
+        qorient = []
+        for o1 in self.orient_sensor:
+            qorient.append(quaternion.from_euler_angles(*o1))
+        self.qorient = np.array(qorient)
 
     def _system_dynamics(self, xk, omegak, dt, Ca):
         phi, theta, psi = xk[:3]
@@ -365,9 +473,9 @@ class IMU(object):
         gvec = [(q.conj() * np.quaternion(0, 0, 0, -1) * q).components[1:] for q in qorient]
 
         self.qorient = qorient
-        self.orient = quaternion.as_euler_angles(qorient)
+        self.orient_sensor = quaternion.as_euler_angles(qorient)
         self.gvec = gvec
-        self.accdyn = self.acc - gvec
+        self.accdyn_sensor = self.acc - gvec
 
     def integrate_gyro(self, initwindow=0.5):
         # convert gyro to rad/sec
@@ -392,9 +500,9 @@ class IMU(object):
             gvec[i, :] = g1.components[1:]
 
         self.qorient = qorient
-        self.orient = quaternion.as_euler_angles(qorient)
+        self.orient_sensor = quaternion.as_euler_angles(qorient)
         self.gvec = gvec
-        self.accdyn = self.acc - gvec
+        self.accdyn_sensor = self.acc - gvec
 
     def orientation_from_accel(self, acc):
         """Get a quaternion orientation from an accelerometer reading, assuming that the accelerometer correctly
@@ -460,9 +568,9 @@ class IMU(object):
 
 
 def main():
-    filename = '/Users/etytel01/Documents/Acceleration/AlgoComparisons/Planar Experiment/trial5_08.hdf5'
-    calibfilename = '/Users/etytel01/Documents/Acceleration/AlgoComparisons/Planar Experiment/calibration.hdf5'
-    encoderfilename = '/Users/etytel01/Documents/Acceleration/AlgoComparisons/Planar Experiment/encoder_8.dat'
+    filename = '/Users/etytel01/Documents/Acceleration/rawdata/two_imu_data/data_b_2.hdf5'
+    calibfilename = '/Users/etytel01/Documents/Acceleration/rawdata/two_imu_data/data_b_1.hdf5'
+    # encoderfilename = '/Users/etytel01/Documents/Acceleration/AlgoComparisons/Planar Experiment/encoder_8.dat'
 
     plt.ion()
 
@@ -470,28 +578,59 @@ def main():
 
     imu.calibrate(calibfilename)
     imu.get_inertial_coords(calibfilename)
+    imu.get_world_coordinates(calibfilename)
 
     imu.load(filename, resamplefreq=200.0)
 
     imu.filter(nsamp=10, method='running')
 
-    enc = np.loadtxt(encoderfilename)
     with h5py.File(filename, 'r') as h5file:
-        t = np.array(h5file['/data/t'])
-    t /= 1000.0
+        enc0 = np.array(h5file['/data/Encoder'])
+        t0 = np.array(h5file['/data/t'])
+    t0 /= 1000.0
+
+    t = imu.t
+    enc = interpolate.interp1d(t0, enc0)(t)
 
     # fig, ax = plt.subplots()
     # ax.plot(t, enc)
 
-    orient1 = imu.get_orientation(method='ekf')
-    orient2 = imu.get_orientation(method='madgwick')
-    orient3 = imu.get_orientation(method='integrate_gyro')
+    orient_ekf1 = copy(imu.get_orientation(method='ekf', lCa=(0.0, -0.3, -0.7)))
+    accd1 = copy(imu.accdyn)
+    orient_ekf2 = copy(imu.get_orientation(method='ekf', lCa=(3.0, 3.0, 3.0)))
+    accd2 = copy(imu.accdyn)
+    orient_ekf3 = copy(imu.get_orientation(method='ekf', lCa=(0.0, 0.0, 0.0)))
+    accd3 = copy(imu.accdyn)
+    orient_ekf4 = copy(imu.get_orientation(method='ekf', lCa=(-5.0, -5.0, -5.0)))
+    accd4 = copy(imu.accdyn)
+
+    orient_mad = imu.get_orientation(method='madgwick')
+    orient_gyro = imu.get_orientation(method='integrate_gyro')
+
+    enc -= enc[0]
 
     fig, ax = plt.subplots()
     ax.plot(t, enc, label='encoder')
-    ax.plot(imu.t[1:], np.rad2deg(orient1[:,2]), label='ekf')
-    ax.plot(imu.t, np.rad2deg(orient2[:,2]), label='madgwick')
-    ax.plot(imu.t, np.rad2deg(orient3[:,2]), label='gyro')
+    ax.plot(imu.t, np.rad2deg(orient_ekf1[:, 0]), label='ekf')
+    ax.plot(imu.t, np.rad2deg(orient_mad[:, 0]), label='madgwick')
+    ax.plot(imu.t, np.rad2deg(orient_gyro[:, 0]), label='gyro')
+    ax.legend()
+
+    fig, ax = plt.subplots(2, 1)
+    ax[0].plot(t, enc, label='encoder')
+    ax[0].plot(t, np.rad2deg(orient_ekf2[:,0]), label='Ca=1000')
+    ax[0].plot(t, np.rad2deg(orient_ekf3[:,0]), label='Ca=1')
+    ax[0].plot(t, np.rad2deg(orient_ekf4[:,0]), label='Ca=0.01')
+
+    ax[1].plot(t, np.rad2deg(orient_ekf2[:,0])-enc, label='Ca=1000')
+    ax[1].plot(t, np.rad2deg(orient_ekf3[:,0])-enc, label='Ca=1')
+    ax[1].plot(t, np.rad2deg(orient_ekf4[:,0])-enc, label='Ca=0.01')
+    ax[1].legend()
+
+    fig, ax = plt.subplots()
+    ax.plot(t, accd2[:, 0], label='Ca=1000')
+    ax.plot(t, accd3[:, 0], label='Ca=1')
+    ax.plot(t, accd4[:, 0], label='Ca=0.01')
     ax.legend()
 
     plt.show(block=True)

@@ -16,7 +16,7 @@ load(filename,'exs','eys','scale','fishlenmm','haxmmss','haymmss','humms','hvmms
     'hxmm','hymm','hxs','hys','t','txmm','tymm','txs','tys','fps');
 warning(W);
 
-if exist('exs','var') && ~isempty(exs) && any(~isnan(exs))
+if exist('exs','var') && ~isempty(exs) && any(any(~isnan(exs)))
     ismidline = true;
 else
     ismidline = false;
@@ -203,7 +203,7 @@ if ismidline && (npts >= 5)
         pksite{side} = pksite{side}(ord);
     end
 
-    npk = sum(pksite{1} == 1) + sum(pksite{1} == 1) + 3;
+    npk = sum(pksite{1} == 1) + sum(pksite{2} == 1) + 3;
 
     indpeak = NaN(npts,npk);
     amppeak = NaN(npts,npk);
@@ -260,6 +260,8 @@ if ismidline && (npts >= 5)
                 %match this peak
             end
         end
+        
+        indpeak(indpeak == 0) = NaN;
     end
 
     bad = indpeak == 0;
@@ -360,7 +362,7 @@ for pk = 1:size(indpeak,2)-1
         btind = indpeak(end,pk)+1:indpeak(end,pk+1);
         
         comspeedfwdmn(pk) = nanmean(comspeedfwd(btind));
-        comspeedfwdrms(pk) = rms(comspeedfwd(btind));
+        comspeedfwdrms(pk) = rms(comspeedfwd(btind) - comspeedfwdmn(pk));
         comspeedlatrms(pk) = rms(comspeedlat(btind));
         
         headxmn = nanmean(hxmm(btind));
