@@ -8,6 +8,12 @@ opt.resamplerate = [];
 opt.axisorder = {};     %{'-Y','-Z','X'};
 opt.constbiasgyro = [0 0 0];
 opt.timerange = [];
+opt.datapath = '/Data';
+opt.imupath = '';
+opt.accelpath = 'Accel';
+opt.gyropath = 'Gyro';
+opt.timepath = 't';
+opt.samplerate = [];
 
 if (nargin == 1)
     calib = struct([]);
@@ -28,23 +34,43 @@ if isempty(calib)
     calib = struct('chip2world',eye(3), 'world2chip', eye(3));
 end
 
-acc = h5read(filename,'/Data/Accel');
-gyro = h5read(filename,'/Data/Gyro');
-t = h5read(filename,'/Data/t');
+accpath = join_hdf5_path({opt.datapath, opt.imupath, opt.accelpath});
+gyropath = join_hdf5_path({opt.datapath, opt.imupath, opt.gyropath});
+tpath = join_hdf5_path({opt.datapath, opt.timepath});
 
-istrigger = h5read(filename,'/Data/Trigger');
-istrigger = istrigger > 0;
-iszero = h5read(filename,'/Data/Zero');
-iszero = iszero > 0;
+acc = h5read(filename,accpath);
+gyro = h5read(filename,gyropath);
 
-acc_units = h5readatt(filename, '/Data/Accel','Units');
+if size(acc,1) == 3
+    acc = acc';
+    gyro = gyro';
+end
+
+[t, err] = hdf5err(@h5read,filename,tpath);
+if ~isempty(err) 
+    if ~isempty(opt.samplerate)
+        t = (0:size(acc,1)-1)' / opt.samplerate;
+    else
+        t = (1:size(acc,1))';
+    end
+    
+    istrigger = false(size(t));
+    iszero = false(size(t));
+else
+    istrigger = h5read(filename,'/Data/Trigger');
+    istrigger = istrigger > 0;
+    iszero = h5read(filename,'/Data/Zero');
+    iszero = iszero > 0;
+end
+
+[acc_units, err] = hdf5err(@h5readatt, filename, accpath,'Units');
 acc_units = char(acc_units');
-gyro_units = h5readatt(filename, '/Data/Gyro','Units');
+[gyro_units, ~] = hdf5err(@h5readatt,filename, gyropath,'Units');
 gyro_units = char(gyro_units');
-acc_range = h5readatt(filename, '/Data/Accel','full_range');
-gyro_range = h5readatt(filename, '/Data/Gyro','full_range');
+[acc_range, ~] = hdf5err(@h5readatt,filename, accpath,'full_range');
+[gyro_range, ~] = hdf5err(@h5readatt,filename, gyropath,'full_range');
 
-t_units = h5readatt(filename, '/Data/t','Units');
+[t_units, ~] = hdf5err(@h5readatt,filename, tpath,'Units');
 t_units = char(t_units');
 
 acc_units = regexprep(acc_units, '\\00', '');
@@ -56,6 +82,8 @@ switch t_units
         tscale = 1e9;
     case {'millisec','msec'}
         tscale = 1e3;
+    case ''
+        tscale = 1;
     otherwise
         error('Unrecognized time unit: %s\n', t_units);
 end
@@ -171,5 +199,11 @@ gyro = gyro - repmat(opt.constbiasgyro,[size(gyro,1) 1]);
 imu.gyro = gyro * calib.chip2world;
 imu.gyro_units = gyro_units;
 imu.gyro_range = gyro_range;
+
+
+function p = join_hdf5_path(C)
+
+bad = cellfun(@isempty, C);
+p = strjoin(C(~bad), '/');
 
 
